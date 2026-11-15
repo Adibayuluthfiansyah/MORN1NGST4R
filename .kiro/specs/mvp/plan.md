@@ -91,12 +91,12 @@ Milestone IDs are stable. M0 and M16 to M25 were added in Round 6 to close PM-01
 | M13 | Frontend foundation: shell, login, bootstrap, security headers, generated client | M4 | FR-AUTH-002 (browser side), FR-EVIDENCE-003 | O-02, O-03 verification (D-79). Node and npm (D-66) |
 | M14 | Reporting (Markdown) | M6, M22 | FR-REPORT-001 to 003 | none |
 | M15 | End-to-end authorized lab assessment | M11, M14, M22b, M23, M24 | all MVP requirements, SM-01 to SM-09 | D-58 for any intrusive step |
-| M16 | Program, target and scope management use cases and the policy store | M1, M2, M4, M5 | FR-PROG-001, FR-PROG-002, FR-POLICY-002, FR-SCOPE-001 (registration) | none |
+| M16 | Program, target, scope and assessment records (create, target set), and the policy store | M1, M2, M4, M5 | FR-PROG-001, FR-PROG-002, FR-POLICY-002, FR-SCOPE-001 (registration), FR-ASSESS-001 (records and target set) | none |
 | M17 | Lab registration and lifecycle | M2, M5, M16 | FR-SCOPE-004 | none |
 | M18 | Target authorization validation | M4, M5, M16, M17 | FR-SCOPE-005, FR-SCOPE-006 (invalidation use case) | none |
-| M19 | Approval application lifecycle (request, approve with re-authentication, revoke, consume) | M2, M3, M4, M5, M18 | FR-APPROVAL-001 to 003, FR-APPROVAL-005 | G-auth, G-consume |
+| M19 | Canonical operations, plan items and the approval application lifecycle (request, approve with re-authentication, revoke, consume) | M2, M3, M4, M5, M16, M18 | FR-APPROVAL-001 to 003, FR-APPROVAL-005, FR-FINDING-004 (plan items) | G-auth, G-consume |
 | M20 | Asset and endpoint inventory | M1, M3, M16 | FR-ASSET-001, FR-ASSET-002 | none |
-| M21 | Assessment management and test planning | M16, M18, M19, M20 | FR-ASSESS-001, FR-FINDING-004 | none |
+| M21 | Assessment lifecycle (ready, start, pause, resume, complete, cancel, status) and job creation | M16, M18, M19, M20 | FR-ASSESS-001 (lifecycle), FR-JOB-001 (creation use case) | none |
 | M22 | Finding lifecycle, validation records and human verification | M4, M5, M6, M20 | FR-FINDING-001, FR-FINDING-002 (records), FR-FINDING-003 | none |
 | M22b | Validation replay through the first-party client | M9, M19, M22 | FR-FINDING-002 (replay) | G-egress |
 | M23 | AI-assisted analysis and orchestration | M6, M12, M21, M22 | FR-AI-005, FR-FINDING-004 (AI proposals) | none |
@@ -121,6 +121,8 @@ Behavior that no milestone may break: automated analysis cannot mark a finding V
 | G-egress | Regression tests derived from the spike E-suite pass against the product's client and proxy, with per-job sockets and refusal (not neutralization) of Host overrides | M10 and any network-touching tool |
 | G-revoke | Measured: queued and running work stops within 30 seconds after a revocation or scope or lab change | any approval-bound job |
 | G-redact | A secret search over argv, environment, files, logs, evidence and reports finds none | every release |
+| G-recovery | The tests of `docs/design/database/recovery-generation.md` section 11 pass: a restored older dump, a missing, invalid, older or mismatching marker, a crash in each reconciliation phase and a stale worker are all denied or recovered without granting authority | M7, any job claim |
+| G-openapi | `docs/design/api/openapi.yaml` is validated against the official OpenAPI 3.1 JSON Schema, with the tool, version, command and result recorded here. Until then the file is NOT VALIDATED AGAINST OFFICIAL OPENAPI 3.1 SCHEMA (structural checks only). | any server or client code generation, milestone M16 |
 | G-foundation | `python3 scripts/validate-foundation.py` exits 0: register IDs unique, references resolve, milestone dependencies acyclic, every requirement mapped to a milestone, ignore rules hold, safety scan clean | every foundation commit |
 
 ## Acceptance criteria for the MVP
@@ -217,7 +219,7 @@ Depends on: M1. Deliverable: `application/scope.CanonicalizeHost(input string) (
 Depends on: M1. Deliverable: pure `operation` (canonical form and hash), `actor` (human, system, ai, P-02), `approval` (record with expiry, uses, duration, concurrency, rate, attempt maximum, hash and destinations), the consumption state machine (claim, launch check, denial, retry claim), and the pure decision function returning `AuthorizedOperation` (P-03, P-04). Acceptance: expiry stops new launches only, revocation, an intrusive operation has one launch, a pre-launch denial is not an attempt, a consumed use is not restored, a retry claim reuses the record, a zero-value `AuthorizedOperation` is rejected, an AI actor cannot approve. No database.
 
 ### M3: Persistence
-Depends on: M2. Deliverable: PostgreSQL 18 per-user cluster scripts (D-67), goose migrations (forward only), sqlc queries, login roles for migration, api, worker and retention, an append-only audit table with INSERT and SELECT only for the runtime roles, the policy store tables (D-64 choice 4), and the atomic conditional consume statement with a unique `(approval, job)` constraint. Acceptance: G-consume with real concurrent transactions, grant tests, a socket mode test, and a measurement of idle memory on the 8 GB laptop. Not covered: separation of two processes of one OS user (D-78).
+Depends on: M2. Deliverable: PostgreSQL 18 per-user cluster scripts (D-67), goose migrations (forward only, the slices of `docs/design/database/migration-plan.md`), sqlc queries, login roles for migration, api, worker and retention, an append-only audit table with INSERT and SELECT only for the runtime roles, the policy store tables (D-64 choice 4), the atomic conditional consume statement with a unique `(approval, job)` constraint, and the recovery generation: the `recovery_state` table, the external marker file and startup reconciliation (DB-28, gate G-recovery). Acceptance: G-consume with real concurrent transactions, G-recovery, grant tests, a socket mode test, and a measurement of idle memory on the 8 GB laptop. Not covered: separation of two processes of one OS user (D-78).
 
 ### M4: Authentication and session
 Depends on: M3. Deliverable: one local account, Argon2id (benchmarked), server-side sessions with hashed tokens, HttpOnly cookie, CSRF token, Host and Origin checks, login rate limiting, the bootstrap secret on a memory-backed file, the one-time recovery code, password re-entry for intrusive approval and widening policy changes (default every time). No API tokens. Acceptance: G-auth, a test that bootstrap is refused without a memory-backed location, a recovery reuse test, and browser-level tests for DNS rebinding and cookie sharing across localhost ports (unverified today, T-55, T-57).
@@ -255,8 +257,8 @@ Depends on: M6, M22. Deliverable: Markdown report from `text/template`, untruste
 ### M15: End-to-end local lab assessment
 Depends on: M11, M14, M22b, M23, M24. Deliverable: the acceptance scenario above against a local lab registered under D-47, with all gates green. Acceptance: that scenario passes end to end on the baseline host, every denial and approval in it is audited, and no external target is involved. Intrusive steps only when D-58 is satisfied.
 
-### M16: Program, target and scope management
-Depends on: M1, M2, M4, M5. Deliverable: application use cases to register a program with a rules reference and version, register targets, add and remove scope rules, record refused exclusions, and the single policy store port with audited changes and re-authentication for widening changes. Acceptance: a refused exclusion blocks readiness until acknowledged or replaced (choice 10), every policy change records old value, new value, actor, time and reason, an AI or worker actor is refused, a widening change without fresh password entry is refused.
+### M16: Program, target, scope and assessment records
+Depends on: M1, M2, M4, M5. Deliverable: application use cases to register a program with a rules reference and version, register targets, publish scope versions, record refused exclusions, create an assessment in draft with its target set (labs and validation need it), and the single policy store port with audited changes and re-authentication for widening changes. Gate G-openapi must pass before code is generated from the API contract. Acceptance: a refused exclusion blocks readiness until acknowledged or replaced (choice 10), every policy change records old value, new value, actor, time and reason, an AI or worker actor is refused, a widening change without fresh password entry is refused.
 
 ### M17: Lab registration and lifecycle
 Depends on: M2, M5, M16. Deliverable: lab registration bound to a program and an assessment with exact target kind, permitted range, ports for loopback and local-interface addresses, expiry and revocation that invalidate dependent jobs, never a replacement for scope validation. Acceptance: a public name that resolves into a lab range does not inherit it, the CIDR minimum applies, forbidden address classes are refused, every change is audited.
@@ -264,14 +266,14 @@ Depends on: M2, M5, M16. Deliverable: lab registration bound to a program and an
 ### M18: Target authorization validation
 Depends on: M4, M5, M16, M17. Deliverable: the validation record (mechanical scope result, program-rule reference, human attestation), bound to the canonical target-set hash and the rules version, lab-specific wording, 24-hour expiry that stops new launches only. Acceptance: any scope, rules or lab change makes it stale, an AI attestation is refused, the interface does not call it proof of ownership.
 
-### M19: Approval application lifecycle
-Depends on: M2, M3, M4, M5, M18. Deliverable: request, approve (rendered only from the canonical operation, with password re-entry for intrusive operations), revoke and consume use cases. Acceptance: G-consume and G-auth, an approval cannot authorize an unrelated operation, an AI actor cannot approve.
+### M19: Operations, plan items and the approval application lifecycle
+Depends on: M2, M3, M4, M5, M16, M18. Deliverable: canonical operations and plan items (an approval binds one operation of one plan item), then request, approve (rendered only from the canonical operation, with password re-entry for intrusive operations), revoke and consume use cases. Acceptance: G-consume and G-auth, an approval cannot authorize an unrelated operation, an AI actor cannot approve.
 
 ### M20: Asset and endpoint inventory
 Depends on: M1, M3, M16. Deliverable: domains, addresses, services, HTTP services, technologies, endpoints and parameters with origin and an append-only observation history (D-76). Acceptance: a repeated run adds an observation and overwrites nothing, a discovered asset is flagged as an observation until scope evaluation passes, no scheduler exists.
 
-### M21: Assessment management and test planning
-Depends on: M16, M18, M19, M20. Deliverable: assessment lifecycle (create, start, pause, complete), plan items with origin owned by the `assessment` domain (P-38), immutability after approval. Acceptance: a plan item cannot become a job without a policy decision and, where required, an approval.
+### M21: Assessment lifecycle and job creation
+Depends on: M16, M18, M19, M20. Deliverable: the assessment transitions (ready, start, pause, resume, complete, cancel), the status summary, and the use case that creates a job from an accepted plan item at E1. Acceptance: a plan item cannot become a job without a policy decision and, where required, an approved approval for the same operation hash, and a stale validation blocks ready, start and resume.
 
 ### M22: Finding lifecycle, validation and human verification
 Depends on: M4, M5, M6, M20. Deliverable: the seven states and the transition table of D-75, deduplication key, validation records linked to evidence, report status separate from validation status, the Verified transition for a human actor only. Acceptance: an AI, worker or tool actor cannot set Verified, a refused attempt is audited, Verified is refused when evidence fails its integrity check or no validation record exists, a duplicate observation never changes a state.

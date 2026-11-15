@@ -98,23 +98,23 @@ for l in TM.split('\n'):
     if m and ' | ' in l:
         t_rows.append((m.group(1), [c.strip() for c in l.strip()[1:-1].split(' | ')]))
 reg = [(i, c) for i, c in t_rows if len(c) == 12]
-check('threat register has 72 rows', len(reg) == 72, str(len(reg)))
+check('threat register has 73 rows', len(reg) == 73, str(len(reg)))
 ids = [i for i, _ in reg]
-check('threat ids unique and contiguous', ids == ['T-%02d' % n for n in range(1, 73)])
+check('threat ids unique and contiguous', ids == ['T-%02d' % n for n in range(1, 74)])
 check('every threat has all 12 fields non-empty', all(all(x for x in c) for _, c in reg))
 STATUS = {'Mitigated and tested', 'Feasibility shown', 'Specified', 'Partially specified', 'Unresolved', 'Accepted risk'}
 check('threat statuses are from the vocabulary', all(c[7] in STATUS for _, c in reg))
 check('no threat is "Mitigated and tested" (no code exists)', not any(c[7] == 'Mitigated and tested' for _, c in reg))
 check('priorities are High, Medium or Low', all(c[10] in ('High', 'Medium', 'Low') for _, c in reg))
 imp = re.findall(r'(?m)^\| (T-\d+) \| (.+) \| (High|Medium|Low) \|$', TM.split('### 7.4 Impact by threat')[1].split('## 8. Abuse cases')[0])
-check('impact table covers all 72 threats', [i for i, _, _ in imp] == ids)
+check('impact table covers all 73 threats', [i for i, _, _ in imp] == ids)
 check('impact priority matches register', all(p == c[10] for (i, _, p), (_, c) in zip(imp, reg)))
 cnt_line = re.search(r'The register has (\d+) rows', TM)
-check('stated row count matches', cnt_line and int(cnt_line.group(1)) == 72)
+check('stated row count matches', cnt_line and int(cnt_line.group(1)) == 73)
 tm_refs = set(int(x) for x in re.findall(r'(?<![A-Za-z-])T-(\d{2})(?!\d)', '\n'.join(read(d) for d in DOCS)))
-check('threat references resolve', tm_refs <= set(range(1, 73)), str(sorted(tm_refs - set(range(1, 73)))))
+check('threat references resolve', tm_refs <= set(range(1, 74)), str(sorted(tm_refs - set(range(1, 74)))))
 total_line = re.search(r'\| Total \| (\d+) \| (\d+) \| (\d+) \| (\d+) \|', TM)
-check('counts table total matches', total_line and int(total_line.group(4)) == 72)
+check('counts table total matches', total_line and int(total_line.group(4)) == 73)
 
 # ---------------------------------------------------------------- 3. PRD
 blocks = re.split(r'(?m)^(?=#### )', PRD)
@@ -129,7 +129,7 @@ for fid, b in frs.items():
     check('%s has all eight fields' % fid, all(('- **%s:**' % f) in b for f in FIELDS))
 check('PRD FR ids unique', len(re.findall(r'(?m)^#### FR-', PRD)) == len(frs))
 nfr = re.findall(r'(?m)^\| (NFR-[A-Z]+-\d+) \|', PRD)
-check('PRD has 23 NFRs, unique', len(nfr) == 23 and len(set(nfr)) == 23, str(len(nfr)))
+check('PRD has 24 NFRs, unique', len(nfr) == 24 and len(set(nfr)) == 24, str(len(nfr)))
 check('no requirement is marked open', 'OPEN — OWNER DECISION REQUIRED' not in ''.join(frs.values()) and not re.search(r'\| `OPEN — OWNER', PRD))
 check('no FR status claims implementation', not any(re.search(r'- \*\*MVP status:\*\* (Implemented|Done|Complete)', b) for b in frs.values()))
 check('no FR is "Not in plan"', not any(re.search(r'- \*\*MVP status:\*\* Not in plan', b) for b in frs.values()))
@@ -222,7 +222,7 @@ test-results/x packages/api-client/dist/index.js apps/web/.eslintcache dist/x bu
 .pytest_cache/x .DS_Store Thumbs.db a.swp b~ .idea/x .vscode/settings.json'''.split()
 MUST_TRACK = '''.env.example .env.local.example .gitignore LICENSE README.md Makefile .kiro/steering/security.md .kiro/steering/tech.md .kiro/specs/mvp/plan.md
 .kiro/hooks/skill-routing.json .kiro/agents/a.json docs/PRD.md docs/security/threat-model.md docs/decisions/0003-foundation-closure-decisions.md
-docs/development/third-party-licenses/superpowers.MIT.txt scripts/sync-agent-skills.sh scripts/validate-foundation.py scripts/spikes/egress/go.mod
+scripts/sync-agent-skills.sh scripts/validate-foundation.py scripts/spikes/egress/go.mod
 scripts/spikes/egress/last-run/e1.log scripts/spikes/sandbox/sandbox.py services/core/go.mod services/core/go.sum services/core/sqlc.yaml
 services/core/internal/domain/scope/host.go services/core/internal/domain/evidence/evidence.go services/core/internal/domain/job/job.go
 services/core/internal/domain/approval/approval.go services/core/internal/application/evidence/service.go
@@ -241,7 +241,7 @@ bad_t = [p for p in MUST_TRACK if ignored(p)]
 check('%d representative paths are ignored' % len(MUST_IGNORE), not bad_i, str(bad_i))
 check('%d representative source and template paths stay trackable' % len(MUST_TRACK), not bad_t, str(bad_t))
 check('.gitignore is not itself ignored', not ignored('.gitignore'))
-tracked_ignored = git('ls-files', '-ci', '--exclude-standard').stdout.split()
+tracked_ignored = [f for f in git('ls-files', '-ci', '--exclude-standard').stdout.split() if os.path.exists(f)]  # a file deleted from the working tree but not yet committed is not an exposure
 check('no tracked file is matched by an ignore rule', not tracked_ignored, str(tracked_ignored))
 staged = git('diff', '--cached', '--name-only').stdout.split('\n')
 staged = [s for s in staged if s]

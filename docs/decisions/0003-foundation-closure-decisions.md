@@ -147,7 +147,7 @@ The never-authorize list is `169.254.169.254` and `fd00:ec2::254` (D-39) plus `1
 - Bubblewrap (LGPL) is run only as an external program that the user installs. It is not linked, copied or redistributed by the project.
 - MPL-2.0 public suffix data is not added to the repository. The question reopens with O-32.
 - GPL-licensed development tools (golangci-lint) are not adopted and nothing GPL is added to the repository.
-- Every dependency is recorded in `tech.md` with version, licence and reason before it is added. Third-party agent skill licences are in `docs/development/third-party-licenses/`.
+- Every dependency is recorded in `tech.md` with version, licence and reason before it is added. Third-party agent skills are local-only development tooling. They are not part of the product and not redistributed, and their license copies are in the git-ignored `.kiro/skills-licenses/`.
 - This is an engineering policy and a record of evidence. It is not legal advice. Tool licences (Nmap Public Source License and others) need a separate review before any adapter.
 
 ### D-75 Findings, deduplication and reporting

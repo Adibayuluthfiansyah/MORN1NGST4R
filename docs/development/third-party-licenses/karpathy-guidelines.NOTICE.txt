@@ -1,3 +1,0 @@
-karpathy-guidelines: upstream repository has no LICENSE file.
-MIT is declared in skills/karpathy-guidelines/SKILL.md (license: MIT), .claude-plugin/plugin.json and README.md.
-Source: https://github.com/multica-ai/andrej-karpathy-skills @ 2c606141936f1eeef17fa3043a72095b4765b9c2
