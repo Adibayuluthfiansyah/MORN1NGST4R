@@ -19,7 +19,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKILLS_DIR="$ROOT/.kiro/skills"
 STEERING_DIR="$ROOT/.kiro/steering"
-LICENSE_DIR="$ROOT/docs/development/third-party-licenses"
+# Local only and git-ignored: upstream license copies of the installed third-party skills.
+LICENSE_DIR="$ROOT/.kiro/skills-licenses"
 LOCK_FILE="$ROOT/.kiro/skills-lock.json"
 
 # ---- Pins -----------------------------------------------------------------

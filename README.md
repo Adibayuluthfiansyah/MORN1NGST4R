@@ -33,7 +33,11 @@ It checks the decision register, document references, milestone dependencies, th
 
 ## Agent skills
 
-The development agent uses third-party skills that are installed locally and are not committed. After a fresh clone run `scripts/sync-agent-skills.sh install`. See `docs/development/agent-skills.md`.
+Contributors may use third-party agent skills as optional local tooling. They are installed locally, are git-ignored, and are not part of MORN1NGST4R. Building, running and testing the product does not need them. See `docs/development/agent-skills.md`.
+
+## License and third-party material
+
+The project is licensed under the Apache License 2.0 (`LICENSE`). That license covers the material this project authored. It does not relicense third-party material. Third-party agent skills are local-only development tooling. They are not committed, not redistributed and not part of the product.
 
 ## Safety
 

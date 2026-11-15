@@ -7,7 +7,7 @@ Third-party skills used while developing MORN1NGST4R with Kiro CLI V3. They guid
 | Concern | Location |
 | --- | --- |
 | Installed skills (unmodified upstream copies) | `.kiro/skills/<name>/` |
-| Always-on Caveman rule (generated) | `.kiro/steering/caveman.md` |
+| Always-on Caveman rule (generated, local only, git-ignored) | `.kiro/steering/caveman.md` |
 | Always-on Karpathy include and conflict rules | `.kiro/steering/karpathy-guidelines.md` |
 | Skill routing policy | `.kiro/steering/skill-routing.md` |
 | Skill routing prompt hook | `.kiro/hooks/skill-routing.json` |
@@ -15,13 +15,13 @@ Third-party skills used while developing MORN1NGST4R with Kiro CLI V3. They guid
 | Design skill roles (auto-included) | `.kiro/steering/design-skills.md` |
 | Content hashes of the local payload (generated, git-ignored) | `.kiro/skills-lock.json` |
 | Pinned sources and install and verify script | `scripts/sync-agent-skills.sh` |
-| Upstream licenses | `docs/development/third-party-licenses/` |
+| Upstream license copies of the installed skills (local only, git-ignored) | `.kiro/skills-licenses/` |
 
 ## Git policy
 
 | Tracked | Git-ignored (local only) |
 | --- | --- |
-| `.kiro/steering/` (including generated `caveman.md`), `.kiro/hooks/`, `scripts/sync-agent-skills.sh`, `docs/development/` including licenses | `.kiro/skills/` (44 MB third-party payload), `.kiro/skills-lock.json`, `.superpowers/`, `.worktrees/`, `.taste-skill/`, `.env*` |
+| `.kiro/steering/` (project-authored files only), `.kiro/specs/`, `.kiro/hooks/`, `scripts/sync-agent-skills.sh`, `docs/development/` | `.kiro/skills/` (44 MB third-party payload), `.kiro/steering/caveman.md` (generated), `.kiro/skills-licenses/`, `.kiro/skills-lock.json`, `.superpowers/`, `.worktrees/`, `.taste-skill/`, `.env*` |
 
 ## Fresh clone setup
 
@@ -48,9 +48,9 @@ No custom agents are used. Steering `inclusion: always` replaces the upstream se
 
 ### License notes
 
-- Upstream license texts are kept in `docs/development/third-party-licenses/`. They are copied by the script, not invented.
-- Karpathy Guidelines: upstream has no LICENSE file. MIT is only declared in its metadata. See `karpathy-guidelines.NOTICE.txt`.
-- UI/UX Pro Max: `ui-styling` declares `license: MIT` in its frontmatter but ships an Apache-2.0 `LICENSE.txt` with an unfilled copyright placeholder. This is unresolved upstream. See `ui-ux-pro-max.NOTICE.txt` and resolve it with the maintainers before redistributing.
+- Nothing from these sources is committed or redistributed. The script writes the upstream license copies into the git-ignored `.kiro/skills-licenses/` for the local user.
+- Karpathy Guidelines: upstream has no LICENSE file. MIT is only declared in its metadata. Treat it as local tooling only.
+- UI/UX Pro Max: `ui-styling` declares `license: MIT` in its frontmatter but ships an Apache-2.0 `LICENSE.txt` with an unfilled copyright placeholder. This is unresolved upstream. This does not affect the project because the skill is never redistributed.
 
 ### Deliberately not installed
 
@@ -93,7 +93,7 @@ This is a dev-agent workflow. It is unrelated to the product's runtime AI skills
 1. Review the upstream diff between the current and new commit (read scripts and hooks).
 2. Change the pin in `scripts/sync-agent-skills.sh`. For UI/UX Pro Max also update the npm integrity (`npm view ui-ux-pro-max-cli@<v> dist.integrity`).
 3. Run `scripts/sync-agent-skills.sh install` (all sources) or `install <source>` for one of `superpowers caveman taste ui-ux-pro-max karpathy`. It replaces only the managed directories and rewrites the lock file.
-4. Review and commit the changes to the script, docs and `caveman.md` (a generated, tracked steering file). The skill payload itself is git-ignored.
+4. Review and commit the changes to the script and docs. The skill payload, the generated `caveman.md` and the license copies are git-ignored.
 
 `scripts/sync-agent-skills.sh verify` works offline and reports any managed skill that differs from the local lock file. Do not edit installed skills. Put local behavior in steering.
 

@@ -298,7 +298,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 An assessment cannot start without a current validation record. AC2 An assessment with an unacknowledged refused exclusion is not ready. AC3 State changes are audited.
 - **Dependencies:** FR-PROG-001, FR-SCOPE-005.
 - **Security:** Starting an assessment is a policy-relevant action and needs an authenticated human. States are Draft, Ready (current validation record and no unacknowledged refused exclusion), Running, Paused (no new launches, queued jobs held), Completed and Cancelled (D-83).
-- **MVP status:** Planned (M3 schema, M21 use cases, M24 screens, M15).
+- **MVP status:** Planned (M3 schema, M16 records and target set, M21 lifecycle transitions, M24 screens, M15).
 - **Source:** Decided requirement. `P 8`, structure.md 5.1 (create, start, pause, complete), D-61, D-83 (states: Draft, Ready, Running, Paused, Completed, Cancelled).
 
 #### FR-POLICY-001 Policy evaluation at enforcement points
@@ -580,7 +580,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 A plan item cannot become a job without a policy decision and, where required, an approval. AC2 An AI-originated item is labeled with its origin. AC3 An approved plan item is immutable.
 - **Dependencies:** FR-APPROVAL-001, FR-AI-003.
 - **Security:** T-41.
-- **MVP status:** Planned (M21 plan items, M23 AI proposals).
+- **MVP status:** Planned (M19 plan items, M23 AI proposals).
 - **Source:** Decided. D-80 (P-38 adopted), D-83, `P 6` step 8.
 
 ### AI
@@ -713,6 +713,7 @@ Targets appear only where a decision or evidence supports them.
 | NFR-REL-001 | Reliability | Jobs are persistent and delivered at least once, with idempotent or non-retryable handlers. | Binary | arch section 14, D-03 | M7 |
 | NFR-REL-002 | Reliability | An audit failure stops new operations but not cancellation, revocation or denials. | Binary | `SEC 13` | M5 |
 | NFR-REL-003 | Reliability | Revocation, scope change and lab change stop affected work within 30 seconds, measured on the baseline. | 30 s (objective until measured) | D-48, O-35 | M7 |
+| NFR-REL-004 | Reliability | After a detected database restore, authority recorded in the restored database (sessions, approvals, validations, labs, enablements, queued and running jobs) is revoked or cancelled before any operation runs. The detector is an external marker, not a database flag. Limits: same-user attackers and snapshots that restore the marker are not covered. | Binary (Proposed, DB-28, DQ-17) | `database/recovery-generation.md` | M3, M4 |
 | NFR-PERF-001 | Performance | No numeric response-time, throughput or job-latency target is set for the MVP. Performance is measured and recorded, not promised. The only timing requirement is the 30-second stop objective (NFR-REL-003). | No target (decided: none) | D-83 | none |
 | NFR-PERF-002 | Performance | Sandbox start-up overhead is recorded as evidence: about 12 to 22 ms in process on the reference host. This is an observation, not a target. | Not a target | sandbox-spike S14 | M8 |
 | NFR-MAINT-001 | Maintainability | Package dependency directions are enforced by an architecture test, and the repository passes `scripts/validate-foundation.py` before each foundation commit. | Binary | structure.md 5.6, D-23 to D-27, D-84 | M0, M1 |
@@ -887,12 +888,12 @@ The roadmap is `.kiro/specs/mvp/plan.md`. This section only maps requirements to
 | M13 | Frontend foundation | FR-AUTH-002 (browser side), FR-EVIDENCE-003, NFR-USE-001 |
 | M14 | Reporting | FR-REPORT-001 to FR-REPORT-003 |
 | M15 | End-to-end local lab assessment | SM-09 and every MVP requirement |
-| M16 | Program, target and scope management | FR-PROG-001, FR-PROG-002, FR-POLICY-002, FR-SCOPE-001 |
+| M16 | Program, target, scope and assessment records | FR-PROG-001, FR-PROG-002, FR-POLICY-002, FR-SCOPE-001, FR-ASSESS-001 (records) |
 | M17 | Lab registration and lifecycle | FR-SCOPE-004 |
 | M18 | Target authorization validation | FR-SCOPE-005, FR-SCOPE-006 |
-| M19 | Approval application lifecycle | FR-APPROVAL-001 to FR-APPROVAL-003, FR-APPROVAL-005 |
+| M19 | Operations, plan items and the approval application lifecycle | FR-APPROVAL-001 to FR-APPROVAL-003, FR-APPROVAL-005, FR-FINDING-004 (plan items) |
 | M20 | Asset and endpoint inventory | FR-ASSET-001, FR-ASSET-002, NFR-INT-003 |
-| M21 | Assessment management and test planning | FR-ASSESS-001, FR-FINDING-004 |
+| M21 | Assessment lifecycle and job creation | FR-ASSESS-001 (lifecycle), FR-JOB-001 (creation) |
 | M22 | Finding lifecycle, validation and human verification | FR-FINDING-001 to FR-FINDING-003 |
 | M22b | Validation replay | FR-FINDING-002 (replay) |
 | M23 | AI-assisted analysis and orchestration | FR-AI-005, FR-FINDING-004 (AI proposals) |

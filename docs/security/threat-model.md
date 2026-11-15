@@ -1,6 +1,6 @@
 # MORN1NGST4R threat model (MVP: localhost web application on Linux)
 
-Status: draft for owner review, revised in Round 6 (2026-11-16). Written before any application code exists. Round 6 re-read every row against the decisions D-63 to D-85, with extra attention to T-01 to T-06, T-14 and T-24, added T-71 (first-run takeover) and T-72 (repository exposure), moved six rows to a stronger status where a decision closed their gap, and recorded the accepted risks of D-78. The status "Mitigated and tested" is still used for no row. Evidence cut-off: the documents and spike records dated 2026-11-15. This file is the standalone threat model that `security.md` section 18 and `docs/decisions/pending/B1-security-review.md` ask for. It records threats and gaps. It does not change any owner decision, steering file or ADR.
+Status: draft for owner review, revised in Round 6 and in the design hardening round (2026-11-16). Written before any application code exists. Round 6 re-read every row against the decisions D-63 to D-85, with extra attention to T-01 to T-06, T-14 and T-24, added T-71 (first-run takeover) and T-72 (repository exposure), moved six rows to a stronger status where a decision closed their gap, and recorded the accepted risks of D-78. The status "Mitigated and tested" is still used for no row. Evidence cut-off: the documents and spike records dated 2026-11-15. This file is the standalone threat model that `security.md` section 18 and `docs/decisions/pending/B1-security-review.md` ask for. It records threats and gaps. It does not change any owner decision, steering file or ADR.
 
 ## 1. Purpose, scope and method
 
@@ -262,7 +262,7 @@ Protections cite the decision or requirement. "Spike" means exercised only in a 
 
 ### 7.1 Register
 
-Columns follow the required order. Asset IDs are from section 2. Boundary IDs are from section 4. "Existing controls" lists what the documents require or decide, not what is built. "Evidence for the status" says why the status was chosen and what a spike did not cover. Rows are grouped by topic only through their numbers: T-01 to T-15 scope and egress, T-16 to T-24 approval and policy, T-25 to T-40 worker, sandbox and proxy, T-41 to T-45 AI and skills, T-46 to T-53 output, evidence and audit, T-54 to T-63 browser, authentication and local access, T-64 to T-70 availability, supply chain, exposure and infrastructure endpoints, T-71 first-run takeover, T-72 repository exposure.
+Columns follow the required order. Asset IDs are from section 2. Boundary IDs are from section 4. "Existing controls" lists what the documents require or decide, not what is built. "Evidence for the status" says why the status was chosen and what a spike did not cover. Rows are grouped by topic only through their numbers: T-01 to T-15 scope and egress, T-16 to T-24 approval and policy, T-25 to T-40 worker, sandbox and proxy, T-41 to T-45 AI and skills, T-46 to T-53 output, evidence and audit, T-54 to T-63 browser, authentication and local access, T-64 to T-70 availability, supply chain, exposure and infrastructure endpoints, T-71 first-run takeover, T-72 repository exposure, T-73 restored authority.
 
 | ID | STRIDE | Threat | Asset | Boundary | Attack path / preconditions | Existing controls | Status | Evidence for the status | Residual risk | Priority | Verification needed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -338,6 +338,7 @@ Columns follow the required order. Asset IDs are from section 2. Boundary IDs ar
 | T-70 | S, I | A spoofed or hijacked PostgreSQL endpoint receives application credentials and data: an attacker pre-creates the socket in a shared directory (default `/tmp`), answers on a TCP port, or a driver authentication bypass is used. | A4, A6, A2 | TB8, TB10 | Another local user creates the socket file before the server starts, or the connection falls back to an unverified server. | P-42 (Proposed): per-user cluster, private socket directory mode 0700, `listen_addresses=''`. P-18: connection settings only. SEC 12: restricted database access. Round 6: D-67 sets a per-user cluster with `listen_addresses` empty and a socket directory with mode 0700, and no password or DSN exists. | Specified | Gap: TV-BE 3.1: `unix_socket_directories` is "normally /tmp" and `unix_socket_permissions` defaults to 0777. TV-BE 2.4: pgx v5.9.0 to v5.11.0 had a `require_auth` and `channel_binding=require` bypass when server identity is not verified (GHSA-95fj-3fxw-g62g), fixed in v5.12.0. Provisioning is open (O-01). Round 6: the provisioning gap is decided. Not built. | Credentials or audit data sent to an impostor. | Medium | Connect only through a socket directory with mode 0700 owned by the user. Check the socket owner before connecting. Pin pgx at a fixed release. |
 | T-71 | S, E | First-run takeover: another local process or a web page learns or guesses the bootstrap secret, or creates the account first, and gains the approval authority. | A3, A1, A2 | TB1, TB10 | The server starts with no account. A same-user process reads the runtime file, or a page posts to the setup route on loopback during the window. | D-68: a 256-bit secret, stored only as a hash, written to a 0600 file in a 0700 directory on a memory-backed filesystem, never printed, logged or put in a URL, deleted on use or shutdown, rate limited and audited. Account creation is refused if no memory-backed location exists. Every other route returns a fixed setup response until an account exists. Host, Origin and CSRF rules apply. | Specified | Not built or tested. A same-user process can read the file (T-61). Recovery by code has the same exposure after creation. | Same-user malware can take the account during the setup window. | High | Tests: creation refused without the secret, refused when the location is not memory backed, secret removed after use, no secret in logs or argv (secret-canary), setup route refused for a foreign Host or Origin, recovery code single use. |
 | T-72 | I | Secrets, evidence, target data, database dumps, captures or local runtime files are committed and pushed to a Git remote. | A4, A5, A8, A13 | TB11 | A broad `git add`, a tool writing into the working tree, or a tracked `.env` or `data/` directory. A public remote makes the exposure permanent. | D-84: `.gitignore` covers the categories with anchored patterns, only placeholder `.env.example` files are trackable, runtime data lives under `$XDG_DATA_HOME`, and `scripts/validate-foundation.py` runs ignore checks and a secrets and local-path scan before each foundation commit. | Partially specified | Round 6 ran `git check-ignore` over representative ignored and trackable paths and the safety scan over the tree, with the results in the foundation record. No pre-commit hook, no CI and no server-side secret scanning exist. Git history keeps a removed file. | A pushed secret stays in history. Rotation is the only remedy. | High | Run the validator before every commit. Add a pre-commit secret scan and CI when code exists. Rotate any exposed credential and do not rely on deleting the file. |
+| T-73 | T, E | A restored database backup brings back old authority: consumed approval uses, revoked approvals, live sessions, active labs, an older current scope version, enablements and queued jobs. Authority that no longer holds is used again. | A2, A1, A3, A11 | TB8 | Someone restores an older dump (honestly or not). The database is internally consistent and cannot tell that time went backwards. | DB-28: recovery generation in an external owner-only marker outside the backup set, startup reconciliation with the `recovery_state` row and an audit watermark, claim-time check CC-15, crash-safe reconciliation through AUTH-10 that revokes the restored authority. DB-27, DQ-17. | Specified | `docs/design/database/recovery-generation.md`. Design only: nothing is implemented or tested. The marker is not cryptographically protected. | A same-user attacker edits marker and database together. A snapshot restores the marker with the database. Events committed after the last marker write are not covered. | High | Gate G-recovery: the twelve tests of recovery-generation.md section 11. |
 
 ### 7.2 STRIDE coverage by boundary
 
@@ -361,7 +362,7 @@ Each cell lists the register rows (the number after `T-`) whose boundary and STR
 | TB5 Core to AI provider | 41 | 45 | 44, 53 | 42, 43, 49, 63 | none | 41, 42, 44, 45 |
 | TB6 Core to credential store | none | none | none | 62 | 62 | 25 |
 | TB7 Core to evidence files | none | 50 | none | 49, 50 | 31 | none |
-| TB8 Core to PostgreSQL | 70 | 21, 51 | 51, 52 | 61, 70 | 52 | 21, 25, 61 |
+| TB8 Core to PostgreSQL | 70 | 21, 51, 73 | 51, 52 | 61, 70 | 52 | 21, 25, 61, 73 |
 | TB9 Sandbox to policy proxy | 36 | 38 | 37, 38, 53 | 39 | 15, 23, 40, 64 | 06, 15, 23, 36, 37, 39, 40 |
 | TB10 Other local principals to local resources | 36, 57, 68, 70, 71 | 51, 57 | 51 | 29, 60, 61, 62, 68, 70 | 62 | 11, 29, 36, 60, 61, 71 |
 | TB11 Supply chain and data inputs | none | 33, 45, 65, 66, 67 | none | 72 | none | 33, 45, 65, 66 |
@@ -374,17 +375,17 @@ Each cell lists the register rows (the number after `T-`) whose boundary and STR
 | --- | --- | --- | --- | --- |
 | Mitigated and tested | 0 | 0 | 0 | 0 |
 | Feasibility shown | 6 | 7 | 1 | 14 |
-| Specified | 15 | 18 | 0 | 33 |
+| Specified | 16 | 18 | 0 | 34 |
 | Partially specified | 12 | 10 | 1 | 23 |
 | Unresolved | 0 | 0 | 0 | 0 |
 | Accepted risk | 1 | 1 | 0 | 2 |
-| Total | 34 | 36 | 2 | 72 |
+| Total | 35 | 36 | 2 | 73 |
 
-The register has 72 rows. "Mitigated and tested" is zero by construction because no application code exists. Feasibility shown rows were exercised only in the spikes on the reference host. The counts were computed from the table in 7.1 with a script and must be recomputed whenever a row changes.
+The register has 73 rows. "Mitigated and tested" is zero by construction because no application code exists. Feasibility shown rows were exercised only in the spikes on the reference host. The counts were computed from the table in 7.1 with a script and must be recomputed whenever a row changes.
 
 ### 7.4 Impact by threat
 
-The register rows carry a priority. This table states the impact that the priority rates, one line per threat. The Priority column repeats the register value. Each register row also has its asset, boundary, scenario (the Threat and attack path columns), mitigation (Existing controls), verification (Verification needed), residual risk and status. The validator checks that all 72 rows have every field.
+The register rows carry a priority. This table states the impact that the priority rates, one line per threat. The Priority column repeats the register value. Each register row also has its asset, boundary, scenario (the Threat and attack path columns), mitigation (Existing controls), verification (Verification needed), residual risk and status. The validator checks that all rows have every field.
 
 | ID | Impact if the threat succeeds | Priority |
 | --- | --- | --- |
@@ -460,6 +461,7 @@ The register rows carry a priority. This table states the impact that the priori
 | T-70 | Credentials or audit data reach an impostor database endpoint. | Medium |
 | T-71 | First-run takeover gives an attacker the account and its approval authority. | High |
 | T-72 | Secrets, evidence or target data are published in a Git remote and cannot be withdrawn. | High |
+| T-73 | Authority that no longer holds is used again, so an operation can run out of scope or twice. | High |
 
 ## 8. Abuse cases
 

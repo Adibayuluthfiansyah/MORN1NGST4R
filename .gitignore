@@ -18,6 +18,10 @@
 .kiro/skills-lock.json
 # Kiro user and workspace settings can hold MCP server tokens. Local only.
 .kiro/settings/
+# Upstream license copies of skills that are installed but not redistributed (written by the sync script).
+.kiro/skills-licenses/
+# Generated third-party Caveman rule (written by the sync script). Local only, not redistributed.
+.kiro/steering/caveman.md
 # Superpowers subagent-driven-development ledgers and brainstorming visual companion files.
 .superpowers/
 # Git worktrees created by the using-git-worktrees skill.
