@@ -1,0 +1,45 @@
+# go=go1.27.3 os=linux/amd64 time=2026-11-15T22:42:41+07:00
+[E3] OBS  Go version: go1.27.3
+[E3] OBS  resolver order for dual.test: [::1 127.0.0.1] (Go uses the family of the FIRST address as 'primary')
+[E3] OBS  primary=v6 fallback=v4
+[E3] OBS  S1 both ok, default FallbackDelay: elapsed=0ms remote=[::1]:34753 err=<nil>
+[E3] OBS  S1 both ok, default FallbackDelay: Control log: ControlContext(tcp6 [::1]:34753 @0ms ALLOW)
+[E3] ok   S1-single-attempt-when-primary-works :: Control calls=1 remote=[::1]:34753
+[E3] OBS  S2 primary refuses: elapsed=0ms remote=127.0.0.1:38513 err=<nil>
+[E3] OBS  S2 primary refuses: Control log: ControlContext(tcp6 [::1]:38513 @0ms ALLOW) ; ControlContext(tcp4 127.0.0.1:38513 @0ms ALLOW)
+[E3] ok   S2-control-called-for-each-attempt :: Control calls=2 remote=127.0.0.1:38513 elapsed=0ms (fallback started immediately on refusal, not after FallbackDelay)
+[E3] OBS  setup: v6: hang listener on ::1:39921 backlog=0, 1 filler conns; extra connect -> dial tcp [::1]:39921: i/o timeout
+[E3] OBS  S3 primary hangs, FallbackDelay=0s (default = 300ms): elapsed=300ms remote=127.0.0.1:39921 err=<nil>
+[E3] OBS  S3 primary hangs, FallbackDelay=0s (default = 300ms): Control log: ControlContext(tcp6 [::1]:39921 @0ms ALLOW) ; ControlContext(tcp4 127.0.0.1:39921 @300ms ALLOW)
+[E3] ok   S3-parallel-fallback-fd=0s :: Control calls=2 (both parallel attempts passed through Control) remote=127.0.0.1:39921 elapsed=300ms
+[E3] OBS  setup: v6: hang listener on ::1:40583 backlog=0, 1 filler conns; extra connect -> dial tcp [::1]:40583: i/o timeout
+[E3] OBS  S3 primary hangs, FallbackDelay=50ms: elapsed=50ms remote=127.0.0.1:40583 err=<nil>
+[E3] OBS  S3 primary hangs, FallbackDelay=50ms: Control log: ControlContext(tcp6 [::1]:40583 @0ms ALLOW) ; ControlContext(tcp4 127.0.0.1:40583 @50ms ALLOW)
+[E3] ok   S3-parallel-fallback-fd=50ms :: Control calls=2 (both parallel attempts passed through Control) remote=127.0.0.1:40583 elapsed=50ms
+[E3] OBS  setup: v6: hang listener on ::1:42603 backlog=0, 1 filler conns; extra connect -> dial tcp [::1]:42603: i/o timeout
+[E3] OBS  S3 primary hangs, FallbackDelay=1s: elapsed=1000ms remote=127.0.0.1:42603 err=<nil>
+[E3] OBS  S3 primary hangs, FallbackDelay=1s: Control log: ControlContext(tcp6 [::1]:42603 @0ms ALLOW) ; ControlContext(tcp4 127.0.0.1:42603 @1000ms ALLOW)
+[E3] ok   S3-parallel-fallback-fd=1s :: Control calls=2 (both parallel attempts passed through Control) remote=127.0.0.1:42603 elapsed=1000ms
+[E3] OBS  S3c primary hangs, FallbackDelay=-1 (disabled), Timeout=1s: elapsed=1000ms remote=- err=dial tcp [::1]:45915: i/o timeout
+[E3] OBS  S3c primary hangs, FallbackDelay=-1 (disabled), Timeout=1s: Control log: ControlContext(tcp6 [::1]:45915 @0ms ALLOW)
+[E3] ok   S3c-serial-short-timeout-starves-second-address :: remote=- err=dial tcp [::1]:45915: i/o timeout Control calls=1: the first address used the whole 1s budget (Go splits remaining time only when >= 2s), the second was never attempted, so nothing connected without a Control call
+[E3] OBS  S3d primary hangs, FallbackDelay=-1 (disabled), Timeout=6s: elapsed=3002ms remote=127.0.0.1:39873 err=<nil>
+[E3] OBS  S3d primary hangs, FallbackDelay=-1 (disabled), Timeout=6s: Control log: ControlContext(tcp6 [::1]:39873 @0ms ALLOW) ; ControlContext(tcp4 127.0.0.1:39873 @3002ms ALLOW)
+[E3] ok   S3d-serial-dial-also-passes-control :: Control calls=2 remote=127.0.0.1:39873 elapsed=3002ms (first address got half of the remaining time before the serial fallback)
+[E3] OBS  S4 Control DENIES primary family: elapsed=0ms remote=127.0.0.1:40865 err=<nil>
+[E3] OBS  S4 Control DENIES primary family: Control log: ControlContext(tcp6 [::1]:40865 @0ms DENY) ; ControlContext(tcp4 127.0.0.1:40865 @0ms ALLOW)
+[E3] ok   S4-deny-in-control-then-dialer-falls-back-and-checks-fallback :: a denied attempt is only a failed attempt: dialer moved on to the other address, and Control ran for it too (calls=2)
+[E3] OBS  S5 Control DENIES everything: elapsed=0ms remote=- err=dial tcp [::1]:37855: policy: [::1]:37855 denied
+[E3] OBS  S5 Control DENIES everything: Control log: ControlContext(tcp6 [::1]:37855 @0ms DENY) ; ControlContext(tcp4 127.0.0.1:37855 @0ms DENY)
+[E3] ok   S5-deny-all-no-connection :: err=dial tcp [::1]:37855: policy: [::1]:37855 denied listener accepts=0 Control calls=2
+[E3] OBS  S6 Control and ControlContext both set: elapsed=0ms remote=[::1]:41735 err=<nil>
+[E3] OBS  S6 Control and ControlContext both set: Control log: ControlContext(tcp6 [::1]:41735 @0ms ALLOW)
+[E3] ok   S6-controlcontext-takes-precedence :: invoked: ControlContext(tcp6 [::1]:41735 @0ms ALLOW) (Control is ignored when ControlContext is set)
+[E3] OBS  S7 dial literal ::1: err=<nil> Control log: ControlContext(tcp6 [::1]:37917 @0ms ALLOW)
+[E3] ok   S7-literal-ip-one-attempt :: calls=1
+[E3] ok   S7-literal-ip-denied-no-fallback :: err=dial tcp [::1]:37917: policy: [::1]:37917 denied calls=1 (nothing to fall back to)
+[E3] OBS  S8 PinnedDial (resolve-once, sequential, Control re-check): remote=[::1]:34565 err=<nil> events=[control ALLOW [::1]:34565 dial [::1]:34565 (requested "dual.test:34565") -> connected]
+[E3] ok   S8-pinned-dial-sufficient :: one attempt, Control saw the real remote address
+[E3] OBS  S8b PinnedDial with a hanging primary: remote=127.0.0.1:44025 err=<nil> elapsed=3001ms events=[control ALLOW [::1]:44025 dial [::1]:44025 failed: dial tcp [::1]:44025: i/o timeout control ALLOW 127.0.0.1:44025 dial 127.0.0.1:44025 (requested "dual.test:44025") -> connected]
+[E3] ok   S8b-pinned-dial-cost-of-no-happy-eyeballs :: serial dial pays the full per-address timeout (3s) when the first validated address hangs; correctness unaffected, latency is the only cost
+VERDICT E3 PASS | Control/ControlContext runs for every attempt incl. fallbacks and can deny one; single pinned IP is sufficient (14 checks)

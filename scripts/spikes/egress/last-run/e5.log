@@ -1,0 +1,33 @@
+# go=go1.27.3 os=linux/amd64 time=2026-11-15T22:42:54+07:00
+[E5] OBS  one certificate (SAN a.test, b.test); both names -> 127.0.0.1; HTTP/2 server on 127.0.0.1:33133
+[E5] OBS  GET a.test -> HTTP/2.0 fixture=h2 host=a.test:33133 path=/ok remote=127.0.0.1:47318 proto=HTTP/2.0 sni=a.test
+[E5] OBS  GET b.test -> HTTP/2.0 fixture=h2 host=b.test:33133 path=/ok remote=127.0.0.1:47330 proto=HTTP/2.0 sni=b.test
+[E5] OBS  GET a.test -> HTTP/2.0 fixture=h2 host=a.test:33133 path=/ok remote=127.0.0.1:47318 proto=HTTP/2.0 sni=a.test
+[E5] OBS  GET b.test -> HTTP/2.0 fixture=h2 host=b.test:33133 path=/ok remote=127.0.0.1:47330 proto=HTTP/2.0 sni=b.test
+[E5] OBS  dial-hook origin=a.test:33133 allowed=true addrs=[127.0.0.1]
+[E5] OBS  dial-hook origin=b.test:33133 allowed=true addrs=[127.0.0.1]
+[E5] OBS  server accepted 2 TCP connection(s): [127.0.0.1:47318 127.0.0.1:47330]
+[E5] ok   go-h2-negotiated :: all four responses were HTTP/2.0
+[E5] OBS  Go transport coalesced a.test and b.test onto one connection: false
+[E5] ok   go-dial-hook-saw-every-origin :: dial hook ran 2 times, once per distinct origin; no origin was served without a hook call (conns=2)
+[E5] ok   go-no-origin-served-without-hook :: server connections=2 dial-hook calls=2
+[E5] OBS  concurrent: dial-hook calls=4, new server connections=4
+[E5] ok   go-concurrent-hook-matches-connections :: every connection had a hook call
+[E5] ok   lab-off/go-denied-no-connect :: err=Get "https://a.test:33133/ok": denied: 127.0.0.1 denied: loopback address (lab mode off)
+[E5] OBS  curl (one process, 3 URLs a,b,a):
+https://a.test:33133/ok http=2 new_connects=1 remote=127.0.0.1:33133 local_port=47396
+https://b.test:33133/ok http=2 new_connects=1 remote=127.0.0.1:33133 local_port=47404
+https://a.test:33133/ok http=2 new_connects=0 remote=127.0.0.1:33133 local_port=47396
+
+[E5] OBS  server accepted 2 new connection(s) from curl
+[E5] ok   curl-observed :: curl negotiated HTTP/2 and completed 3 transfers; coalesced across names=false
+[E5] OBS  curl -v: * Hostname a.test was found in DNS cache
+[E5] OBS  curl -v: * ALPN: curl offers h2,http/1.1
+[E5] OBS  curl -v: * ALPN: server accepted h2
+[E5] OBS  curl -v: * Established connection to a.test (127.0.0.1 port 33133) from 127.0.0.1 port 47408
+[E5] OBS  curl -v: * Hostname b.test was found in DNS cache
+[E5] OBS  curl -v: * ALPN: curl offers h2,http/1.1
+[E5] OBS  curl -v: * ALPN: server accepted h2
+[E5] OBS  curl -v: * Established connection to b.test (127.0.0.1 port 33133) from 127.0.0.1 port 47418
+[E5] OBS  CONCLUSION (what was and was not shown): Go net/http go1.27.3 keys its HTTP/2 pool by origin host:port and did not coalesce a.test/b.test (coalesced=false). curl 8.23.0 (single process) coalesced=false. This says nothing about browsers, nghttp2-based daemons, or other curl versions/builds.
+VERDICT E5 PASS | Go: per-origin connections, hook sees every origin (coalesced=false); curl coalesced=false (observed only) (6 checks)

@@ -1,0 +1,47 @@
+hostside ready: PA=38711 PT=41001 PF=37175 PADM=40445 DNSADDR=127.0.0.1:42635 DNSPORT=42635 ABSNAME=ms-spike-egress-abs-337604 SOCK=/tmp/ms-spike-egress-UxlePN/proxy.sock CA=/tmp/ms-spike-egress-UxlePN/ca.pem HOSTSIDE_PID=337604 [proxy] GET http://127.0.0.1:38711/ok ALLOW addrs=[127.0.0.1] upstream_host_sent=127.0.0.1:38711 status=200
+[proxy] GET http://allowed.test:38711/ok ALLOW addrs=[127.0.0.1] upstream_host_sent=allowed.test:38711 status=200
+[proxy] CONNECT 127.0.0.1:41001 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:41001 (request headers seen: [Proxy-Connection User-Agent])
+[proxy] TUNNEL 127.0.0.1:41001 closed c2s_bytes=1742 s2c_bytes=1189 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[proxy] CONNECT allowed.test:41001 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:41001 (request headers seen: [Proxy-Connection User-Agent])
+[proxy] TUNNEL allowed.test:41001 closed c2s_bytes=1766 s2c_bytes=1209 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[proxy] GET http://[::1]:38711/ok ALLOW addrs=[::1] upstream_host_sent=[::1]:38711 status=200
+[proxy] GET http://127.0.0.1:37175/ok DENY 127.0.0.1 denied: loopback lab port 37175 not listed
+[proxy] CONNECT 127.0.0.1:37175 DENY 127.0.0.1 denied: loopback lab port 37175 not listed
+[proxy] GET http://127.0.0.1:40445/hits DENY 127.0.0.1 denied: loopback lab port 40445 not listed
+[proxy] GET http://deny.test:38711/ok DENY 10.0.0.5 denied: private/unique-local address
+[proxy] GET http://mixed.test:38711/ok DENY 10.0.0.5 denied: private/unique-local address
+[proxy] CONNECT mixed.test:41001 DENY 10.0.0.5 denied: private/unique-local address
+[proxy] GET http://192.0.2.1/ DENY 192.0.2.1 denied: reserved/special-purpose address
+[proxy] GET http://169.254.169.254/latest/meta-data/ DENY 169.254.169.254 denied: cloud metadata address
+[proxy] GET "/ok" DENY not an absolute-URI http proxy request (use CONNECT for https)
+[proxy] CONNECT 127.0.0.1:37175 DENY 127.0.0.1 denied: loopback lab port 37175 not listed
+[proxy] CONNECT 169.254.169.254:80 DENY 169.254.169.254 denied: cloud metadata address
+[proxy] CONNECT 127.0.0.1:38711 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:38711 (request headers seen: [])
+[proxy] TUNNEL 127.0.0.1:38711 closed c2s_bytes=0 s2c_bytes=0 first_client_byte=none
+[proxy] CONNECT 127.0.0.1:37175 DENY 127.0.0.1 denied: loopback lab port 37175 not listed
+[proxy] GET http://allowed.test:38711/ok ALLOW addrs=[127.0.0.1] upstream_host_sent=allowed.test:38711 status=200
+[proxy] GET http://127.0.0.1:37175/ok DENY 127.0.0.1 denied: loopback lab port 37175 not listed
+[proxy] GET http://127.0.0.1:38711/ok ALLOW addrs=[127.0.0.1] upstream_host_sent=127.0.0.1:38711 status=200
+[proxy] GET http://allowed.test:38711/ok ALLOW addrs=[127.0.0.1] upstream_host_sent=allowed.test:38711 status=200
+[proxy] CONNECT 127.0.0.1:41001 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:41001 (request headers seen: [Proxy-Connection User-Agent])
+[proxy] TUNNEL 127.0.0.1:41001 closed c2s_bytes=1742 s2c_bytes=1189 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[proxy] CONNECT allowed.test:41001 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:41001 (request headers seen: [Proxy-Connection User-Agent])
+[proxy] TUNNEL allowed.test:41001 closed c2s_bytes=1766 s2c_bytes=1211 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[proxy] GET http://[::1]:38711/ok ALLOW addrs=[::1] upstream_host_sent=[::1]:38711 status=200
+[proxy] GET http://127.0.0.1:37175/ok DENY 127.0.0.1 denied: loopback lab port 37175 not listed
+[proxy] CONNECT 127.0.0.1:37175 DENY 127.0.0.1 denied: loopback lab port 37175 not listed
+[proxy] GET http://127.0.0.1:40445/hits DENY 127.0.0.1 denied: loopback lab port 40445 not listed
+[proxy] GET http://deny.test:38711/ok DENY 10.0.0.5 denied: private/unique-local address
+[proxy] GET http://mixed.test:38711/ok DENY 10.0.0.5 denied: private/unique-local address
+[proxy] CONNECT mixed.test:41001 DENY 10.0.0.5 denied: private/unique-local address
+[proxy] GET http://192.0.2.1/ DENY 192.0.2.1 denied: reserved/special-purpose address
+[proxy] GET http://169.254.169.254/latest/meta-data/ DENY 169.254.169.254 denied: cloud metadata address
+[proxy] GET "/ok" DENY not an absolute-URI http proxy request (use CONNECT for https)
+[proxy] CONNECT 127.0.0.1:37175 DENY 127.0.0.1 denied: loopback lab port 37175 not listed
+[proxy] CONNECT 169.254.169.254:80 DENY 169.254.169.254 denied: cloud metadata address
+[proxy] CONNECT 127.0.0.1:38711 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:38711 (request headers seen: [])
+[proxy] TUNNEL 127.0.0.1:38711 closed c2s_bytes=0 s2c_bytes=0 first_client_byte=none
+[proxy] CONNECT 127.0.0.1:37175 DENY 127.0.0.1 denied: loopback lab port 37175 not listed
+[proxy] GET http://allowed.test:38711/ok ALLOW addrs=[127.0.0.1] upstream_host_sent=allowed.test:38711 status=200
+[proxy] GET http://127.0.0.1:37175/ok DENY 127.0.0.1 denied: loopback lab port 37175 not listed
+hostside exiting

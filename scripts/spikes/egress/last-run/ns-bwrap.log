@@ -1,0 +1,56 @@
+=== namespace checks: mode=bwrap pid=338159 ns=net:[4026533215] (host ns recorded by runner) ===
+INFO  bwrap interfaces: lo: UNKNOWN mode;
+INFO  bwrap IPv4 addresses: lo 127.0.0.1/8;
+INFO  bwrap IPv6 addresses: lo ::1/128;
+INFO  bwrap IPv4 routes: []  IPv6 routes: []
+INFO  bwrap default route lines in /proc/net/route: 0
+INFO  bwrap PROBE OK caps :: Uid: 1000 1000 1000 1000; CapInh: 0000000000000000; CapPrm: 0000000000000000; CapEff: 0000000000000000; CapBnd: 0000000000000000; CapAmb: 0000000000000000; NoNewPrivs: 1
+INFO  bwrap /etc/resolv.conf nameservers: nameserver 127.0.0.53 
+CHECK bwrap E7.only-loopback-interface GOOD want=no interface except lo :: non-lo interfaces=0 
+CHECK bwrap E7.no-default-route GOOD want=no default route :: default routes=0 
+CHECK bwrap E7.E8.direct-tcp-host-fixture GOOD want=probe:FAIL :: PROBE FAIL tcp 127.0.0.1:38711 :: dial tcp 127.0.0.1:38711: connect: connection refused elapsed=0ms 
+CHECK bwrap E7.direct-tcp-host-tls-fixture GOOD want=probe:FAIL :: PROBE FAIL tcp 127.0.0.1:41001 :: dial tcp 127.0.0.1:41001: connect: connection refused elapsed=0ms 
+CHECK bwrap E7.direct-tcp-host-admin GOOD want=probe:FAIL :: PROBE FAIL tcp 127.0.0.1:40445 :: dial tcp 127.0.0.1:40445: connect: connection refused elapsed=0ms 
+CHECK bwrap E7.direct-tcp-forbidden-port-fixture GOOD want=probe:FAIL :: PROBE FAIL tcp 127.0.0.1:37175 :: dial tcp 127.0.0.1:37175: connect: connection refused elapsed=0ms 
+CHECK bwrap E7.no-route-192.0.2.1-tcp GOOD want=FAIL, 'network is unreachable', fast :: PROBE FAIL tcp 192.0.2.1:80 :: dial tcp 192.0.2.1:80: connect: network is unreachable elapsed=0ms (wall 2ms) 
+CHECK bwrap E7.udp-noroute-192.0.2.1:443-quic-case GOOD want=probe:FAIL :: PROBE FAIL udp 192.0.2.1:443 :: dial: dial udp 192.0.2.1:443: connect: network is unreachable elapsed=0ms 
+CHECK bwrap E7.udp-noroute-error-is-unreachable GOOD want=contains:unreachable :: PROBE FAIL udp 192.0.2.1:443 :: dial: dial udp 192.0.2.1:443: connect: network is unreachable elapsed=0ms 
+CHECK bwrap E7.udp-local-127.0.0.1:443 GOOD want=probe:FAIL :: PROBE FAIL udp 127.0.0.1:443 :: read: read udp 127.0.0.1:37305->127.0.0.1:443: read: connection refused elapsed=0ms 
+CHECK bwrap E7.E8.no-dns-direct-to-host-mock-resolver GOOD want=probe:FAIL :: PROBE FAIL dnsudp 127.0.0.1:42635 allowed.test :: read: read udp 127.0.0.1:38340->127.0.0.1:42635: read: connection refused elapsed=0ms 
+CHECK bwrap E7.E8.no-dns-via-resolv.conf GOOD want=probe:FAIL :: PROBE FAIL dns allowed.test :: lookup allowed.test on 127.0.0.53:53: read udp 127.0.0.1:54083->127.0.0.53:53: read: connection refused elapsed=0ms 
+CHECK bwrap E7.E8.ipv6-loopback-host-fixture GOOD want=probe:FAIL :: PROBE FAIL tcp [::1]:38711 :: dial tcp [::1]:38711: connect: connection refused elapsed=0ms 
+CHECK bwrap E7.E8.abstract-socket-not-reachable GOOD want=probe:FAIL :: PROBE FAIL abstract ms-spike-egress-abs-337604 :: dial unix @ms-spike-egress-abs-337604: connect: connection refused 
+CHECK bwrap E8.tool-ignoring-proxy-env-direct-tcp GOOD want=probe:FAIL :: PROBE FAIL tcp 127.0.0.1:38711 :: dial tcp 127.0.0.1:38711: connect: connection refused elapsed=0ms 
+CHECK bwrap E8.setns-into-host-netns-denied GOOD want=nsenter into the host network namespace must fail :: nsenter: cannot open /proc/337604/ns/net: Permission denied 
+CHECK bwrap E8.curl-noproxy-direct GOOD want=curl:fail :: rc=7 curl: (7) Failed to connect to 127.0.0.1:38711 after 0 ms: Could not connect to server  [http_code=000 proxy_connect=000 exit=7] 
+--- raw socket / packet socket attempts (E8)
+INFO  bwrap PROBE FAIL rawsock AF_INET/SOCK_RAW/ICMP :: socket(): operation not permitted
+INFO  bwrap PROBE FAIL rawsock AF_PACKET :: socket(): operation not permitted
+CHECK bwrap E8.raw-socket-cannot-send-off-host GOOD want=no successful raw send to 192.0.2.1 :: successful raw sends=0 (raw socket creation itself may or may not be permitted: see INFO above) 
+CHECK bwrap E7.socat-relay-listening GOOD want=probe:OK :: PROBE OK tcp 127.0.0.1:3128 :: connected to 127.0.0.1:3128 elapsed=0ms 
+CHECK bwrap E7.proxy-allowed-plain-literal-ip GOOD want=curl:200 :: rc=0 fixture=ALLOWED host=127.0.0.1:38711 path=/ok remote=127.0.0.1:47632 proto=HTTP/1.1 sni=  [http_code=200 proxy_connect=000 exit=0] 
+CHECK bwrap E7.proxy-allowed-plain-name-resolved-by-proxy GOOD want=curl:200 :: rc=0 fixture=ALLOWED host=allowed.test:38711 path=/ok remote=127.0.0.1:47646 proto=HTTP/1.1 sni=  [http_code=200 proxy_connect=000 exit=0] 
+CHECK bwrap E7.proxy-allowed-tls-literal-ip GOOD want=curl:200 :: rc=0 fixture=TLS-ALLOWED host=127.0.0.1:41001 path=/ok remote=127.0.0.1:54252 proto=HTTP/1.1 sni=  [http_code=200 proxy_connect=200 exit=0] 
+CHECK bwrap E7.proxy-allowed-tls-name GOOD want=curl:200 :: rc=0 fixture=TLS-ALLOWED host=allowed.test:41001 path=/ok remote=127.0.0.1:54256 proto=HTTP/1.1 sni=allowed.test  [http_code=200 proxy_connect=200 exit=0] 
+CHECK bwrap E8.ipv6-literal-allowed-by-policy-via-proxy GOOD want=curl:200 :: rc=0 fixture=ALLOWED-v6 host=[::1]:38711 path=/ok remote=[::1]:54784 proto=HTTP/1.1 sni=  [http_code=200 proxy_connect=000 exit=0] 
+CHECK bwrap E7.proxy-denied-port-plain GOOD want=curl:deny :: rc=0 denied: 127.0.0.1 denied: loopback lab port 37175 not listed  [http_code=403 proxy_connect=000 exit=0] 
+2026/11/15 22:42:54 socat[338500] E read(6, 0x55c6be42a000, 8192): Connection reset by peer
+CHECK bwrap E7.proxy-denied-port-connect GOOD want=curl:deny :: rc=7 curl: (7) CONNECT tunnel failed, response 403  [http_code=000 proxy_connect=403 exit=7] 
+CHECK bwrap E7.proxy-denied-admin-port GOOD want=curl:deny :: rc=0 denied: 127.0.0.1 denied: loopback lab port 40445 not listed  [http_code=403 proxy_connect=000 exit=0] 
+CHECK bwrap E7.proxy-denied-private-name GOOD want=curl:deny :: rc=0 denied: 10.0.0.5 denied: private/unique-local address  [http_code=403 proxy_connect=000 exit=0] 
+CHECK bwrap E7.proxy-denied-mixed-name-plain GOOD want=curl:deny :: rc=0 denied: 10.0.0.5 denied: private/unique-local address  [http_code=403 proxy_connect=000 exit=0] 
+2026/11/15 22:42:54 socat[338528] E read(6, 0x55c6be42a000, 8192): Connection reset by peer
+CHECK bwrap E7.proxy-denied-mixed-name-connect GOOD want=curl:deny :: rc=7 curl: (7) CONNECT tunnel failed, response 403  [http_code=000 proxy_connect=403 exit=7] 
+CHECK bwrap E7.proxy-denied-documentation-addr GOOD want=curl:deny :: rc=0 denied: 192.0.2.1 denied: reserved/special-purpose address  [http_code=403 proxy_connect=000 exit=0] 
+CHECK bwrap E7.proxy-denied-metadata-addr GOOD want=curl:deny :: rc=0 denied: 169.254.169.254 denied: cloud metadata address  [http_code=403 proxy_connect=000 exit=0] 
+CHECK bwrap E7.direct-still-fails-after-proxy-use GOOD want=curl:fail :: rc=7 curl: (7) Failed to connect to 127.0.0.1:38711 after 0 ms: Could not connect to server  [http_code=000 proxy_connect=000 exit=7] 
+CHECK bwrap E8.raw-origin-form-request-refused GOOD want=contains:400 :: PROBE OK rawsend 127.0.0.1:3128 GET /ok HTTP/1.1\r\nHost: 127.0.0.1:38711\r\nConnection: close\r\n\ :: connected, first reply line="HTTP/1.1 400 Bad Request" 
+CHECK bwrap E8.raw-CONNECT-forbidden-port-refused GOOD want=contains:403 :: PROBE OK rawsend 127.0.0.1:3128 CONNECT 127.0.0.1:37175 HTTP/1.1\r\nHost: 127.0.0.1:37175\r\n\r\n :: connected, first reply line="HTTP/1.1 403 Forbidden" 
+CHECK bwrap E8.raw-garbage-refused GOOD want=contains:400 :: PROBE OK rawsend 127.0.0.1:3128 hello\r\n\r\n :: connected, first reply line="HTTP/1.1 400 Bad Request" 
+CHECK bwrap E8.raw-CONNECT-metadata-refused GOOD want=contains:403 :: PROBE OK rawsend 127.0.0.1:3128 CONNECT 169.254.169.254:80 HTTP/1.1\r\nHost: 169.254.169.254:80\r\n :: connected, first reply line="HTTP/1.1 403 Forbidden" 
+CHECK bwrap E8.raw-CONNECT-allowed-opens-tunnel GOOD want=contains:200 :: PROBE OK rawsend 127.0.0.1:3128 CONNECT 127.0.0.1:38711 HTTP/1.1\r\nHost: 127.0.0.1:38711\r\n\r\n :: connected, first reply line="HTTP/1.1 200 Connection Established" 
+CHECK bwrap E7.path-unix-socket-reachable-from-namespace GOOD want=contains:403 :: PROBE OK unix /tmp/ms-spike-egress-UxlePN/proxy.sock CONNECT 127.0.0.1:37175 HTTP/1.1\r\nHost: 127. :: connected, first reply line="HTTP/1.1 403 Forbidden" 
+CHECK bwrap E7.go-relay-allowed GOOD want=curl:200 :: rc=0 fixture=ALLOWED host=allowed.test:38711 path=/ok remote=127.0.0.1:47662 proto=HTTP/1.1 sni=  [http_code=200 proxy_connect=000 exit=0] 
+CHECK bwrap E7.go-relay-denied GOOD want=curl:deny :: rc=0 denied: 127.0.0.1 denied: loopback lab port 37175 not listed  [http_code=403 proxy_connect=000 exit=0] 
+=== done mode=bwrap ===
+2026/11/15 22:42:54 socat[338430] W exiting on signal 15

@@ -1,0 +1,28 @@
+# go=go1.27.3 os=linux/amd64 time=2026-11-15T22:42:41+07:00
+[E2] OBS  LookupCNAME(www.test) -> cdn.test. (chain resolved by the mock; policy evaluates only the final addresses)
+[E2] OBS  ok-dual.test       allowed=true  reason="all addresses allowed" detail=[::1=true(lab loopback ::1:40069) 127.0.0.1=true(lab loopback 127.0.0.1:40069)]
+[E2] ok   lab-on/ok-dual.test :: allow=true fetch.final=true contacted=true A/AAAA queries=2/2 dial-events=2
+[E2] OBS  ok-via-cname.test  allowed=true  reason="all addresses allowed" detail=[127.0.0.1=true(lab loopback 127.0.0.1:40069)]
+[E2] ok   lab-on/ok-via-cname.test :: allow=true fetch.final=true contacted=true A/AAAA queries=2/2 dial-events=2
+[E2] OBS  mixed-a.test       allowed=false reason="10.0.0.5 denied: private/unique-local address" detail=[127.0.0.1=true(lab loopback 127.0.0.1:40069) 10.0.0.5=false(private/unique-local address)]
+[E2] ok   lab-on/mixed-a.test :: allow=false fetch.final=false contacted=false A/AAAA queries=2/2 dial-events=0
+[E2] OBS  mixed-a-meta.test  allowed=false reason="169.254.169.254 denied: cloud metadata address" detail=[127.0.0.1=true(lab loopback 127.0.0.1:40069) 169.254.169.254=false(cloud metadata address)]
+[E2] ok   lab-on/mixed-a-meta.test :: allow=false fetch.final=false contacted=false A/AAAA queries=2/2 dial-events=0
+[E2] OBS  aaaa-bad.test      allowed=false reason="fc00::5 denied: private/unique-local address" detail=[127.0.0.1=true(lab loopback 127.0.0.1:40069) fc00::5=false(private/unique-local address)]
+[E2] ok   lab-on/aaaa-bad.test :: allow=false fetch.final=false contacted=false A/AAAA queries=2/2 dial-events=0
+[E2] OBS  aaaa-meta.test     allowed=false reason="fd00:ec2::254 denied: cloud metadata address" detail=[127.0.0.1=true(lab loopback 127.0.0.1:40069) fd00:ec2::254=false(cloud metadata address)]
+[E2] ok   lab-on/aaaa-meta.test :: allow=false fetch.final=false contacted=false A/AAAA queries=2/2 dial-events=0
+[E2] OBS  a-bad.test         allowed=false reason="10.0.0.5 denied: private/unique-local address" detail=[::1=true(lab loopback ::1:40069) 10.0.0.5=false(private/unique-local address)]
+[E2] ok   lab-on/a-bad.test :: allow=false fetch.final=false contacted=false A/AAAA queries=2/2 dial-events=0
+[E2] OBS  mapped.test        allowed=false reason="10.0.0.5 denied: private/unique-local address" detail=[127.0.0.1=true(lab loopback 127.0.0.1:40069) 10.0.0.5=false(private/unique-local address)]
+[E2] ok   lab-on/mapped.test :: allow=false fetch.final=false contacted=false A/AAAA queries=2/2 dial-events=0
+[E2] OBS  www.test           allowed=false reason="10.0.0.9 denied: private/unique-local address" detail=[10.0.0.9=false(private/unique-local address)]
+[E2] ok   lab-on/www.test :: allow=false fetch.final=false contacted=false A/AAAA queries=2/2 dial-events=0
+[E2] OBS  www-meta.test      allowed=false reason="169.254.169.254 denied: cloud metadata address" detail=[169.254.169.254=false(cloud metadata address)]
+[E2] ok   lab-on/www-meta.test :: allow=false fetch.final=false contacted=false A/AAAA queries=2/2 dial-events=0
+[E2] OBS  www-mixed.test     allowed=false reason="192.168.1.10 denied: private/unique-local address" detail=[127.0.0.1=true(lab loopback 127.0.0.1:40069) 192.168.1.10=false(private/unique-local address)]
+[E2] ok   lab-on/www-mixed.test :: allow=false fetch.final=false contacted=false A/AAAA queries=2/2 dial-events=0
+[E2] OBS  ok-dual.test dial events: [control ALLOW [::1]:40069 dial [::1]:40069 (requested "ok-dual.test:40069") -> connected]
+[E2] ok   lab-off/all-denied-no-connect :: 11 names denied, connections unchanged at 3
+[E2] OBS  example lab-off reason: ::1 denied: loopback address (lab mode off)
+VERDICT E2 PASS | any denied address (A, AAAA, CNAME target, 4in6) denies the whole target before any dial (12 checks)

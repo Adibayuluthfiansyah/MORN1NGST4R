@@ -1,0 +1,21 @@
+# go=go1.27.3 os=linux/amd64 time=2026-11-15T22:42:41+07:00
+[E1] OBS  mock DNS at 127.0.0.1:51280; rebind.test: answer #1 -> 127.0.0.1 (lab-allowed), answer #2+ -> 127.0.0.2 (denied by policy but a live fixture)
+[E1] OBS  fixtures: A=127.0.0.1:36645 B=127.0.0.2:36645 (same port)
+[E1] OBS  hop1 http://rebind.test:36645/ok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:36645 status=200 loc="" next=final
+[E1] OBS  request 1 body: "fixture=fixture-A host=rebind.test:36645 path=/ok remote=127.0.0.1:42846 proto=HTTP/1.1 sni="
+[E1] OBS  dial stats: [control ALLOW 127.0.0.1:36645 dial 127.0.0.1:36645 (requested "rebind.test:36645") -> connected]
+[E1] OBS  DNS log after request 1: [q rebind.test type=28 round=0 q rebind.test type=1 round=0]
+[E1] ok   req1-allowed-and-reached-A :: final=true A.conns=1 B.conns=0
+[E1] ok   req1-one-lookup :: A queries=1 AAAA queries=1 (one resolution = one A + one AAAA; no second lookup at dial time)
+[E1] ok   req1-connected-to-validated-IP :: remote=127.0.0.1:36645; Host header seen by server: host=rebind.test:36645
+[E1] OBS  hop1 http://rebind.test:36645/ok -> DENY (127.0.0.2 denied: loopback address outside lab prefixes) addrs=[] remote= status=0 loc="" next=refused: policy
+[E1] ok   req2-rebound-answer-denied-no-connect :: err=denied: 127.0.0.2 denied: loopback address outside lab prefixes B.conns=0 (A queries 1 -> 2: exactly one new lookup per request)
+[E1] OBS  hop1 https://rebind-tls.test:40293/ok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:40293 status=200 loc="" next=final
+[E1] OBS  https body: "fixture=tls-A host=rebind-tls.test:40293 path=/ok remote=127.0.0.1:55824 proto=HTTP/1.1 sni=rebind-tls.test"
+[E1] ok   tls-sni-is-canonical-name :: final=true tls-B.conns=0; remote=127.0.0.1:40293
+[E1] OBS  CONTROL step 1: validator lookup -> allowed=true addrs=[127.0.0.1] (A queries so far: 1)
+[E1] OBS  CONTROL step 2: net/http did its own lookup -> A queries now 2; body="fixture=fixture-B host=rebind.test:36645 path=/ok remote=127.0.0.1:34180 proto=HTTP/1.1 sni=" err=<nil>
+[E1] ok   control-naive-approach-is-rebindable :: validated 127.0.0.1 but net/http connected to 127.0.0.2 (B.conns 0 -> 1). This is the failure mode the pinned dial removes
+[E1] OBS  hop1 http://rebind.test:36645/ok -> DENY (127.0.0.1 denied: loopback address (lab mode off)) addrs=[] remote= status=0 loc="" next=refused: policy
+[E1] ok   lab-off-denied-no-connect :: err=denied: 127.0.0.1 denied: loopback address (lab mode off) A.conns unchanged=1
+VERDICT E1 PASS | pinned dial keeps validated IP across a changing DNS answer; one resolution per request (7 checks)

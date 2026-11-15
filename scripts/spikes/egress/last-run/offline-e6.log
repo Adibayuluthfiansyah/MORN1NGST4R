@@ -1,0 +1,82 @@
+# go=go1.27.3 os=linux/amd64 time=2026-11-15T22:43:07+07:00
+[E6] OBS  proxy http://127.0.0.1:34001; lab ports=[41525 plain, 32901 tls]; NOT listed: 36701 (forbidden fixture), 34001 (proxy's own port)
+[proxy] GET http://allowed.test:41525/ok ALLOW addrs=[127.0.0.1] upstream_host_sent=allowed.test:41525 status=200
+[E6] ok   go/plain-allowed :: status=200 body="fixture=plain host=allowed.test:41525 path=/ok remote=127.0.0.1:39832 proto=HTTP/1.1 sni="
+[E6] ok   go/plain-allowed-one-resolution :: A=1 AAAA=1
+[proxy] CONNECT allowed.test:32901 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:32901 (request headers seen: [User-Agent])
+[E6] ok   go/https-allowed-via-CONNECT :: status=200 body="fixture=tls host=allowed.test:32901 path=/ok remote=127.0.0.1:44182 proto=HTTP/1.1 sni=allowed.test" err=<nil>
+[proxy] TUNNEL allowed.test:32901 closed c2s_bytes=524 s2c_bytes=1081 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[E6] ok   go/https-allowed-one-resolution :: A=1
+[proxy] GET http://deny4.test:41525/ok DENY 10.0.0.5 denied: private/unique-local address
+[E6] ok   go/plain-denied-address :: status=403 body="denied: 10.0.0.5 denied: private/unique-local address"
+[proxy] CONNECT deny4.test:32901 DENY 10.0.0.5 denied: private/unique-local address
+[E6] ok   go/https-denied-address :: err=Get "https://deny4.test:32901/ok": Forbidden
+[proxy] GET http://127.0.0.1:36701/ok DENY 127.0.0.1 denied: loopback lab port 36701 not listed
+[E6] ok   go/plain-denied-port :: status=403 body="denied: 127.0.0.1 denied: loopback lab port 36701 not listed" forbidden-fixture conns=0
+[proxy] CONNECT 127.0.0.1:36701 DENY 127.0.0.1 denied: loopback lab port 36701 not listed
+[E6] ok   go/https-denied-port :: err=Get "https://127.0.0.1:36701/ok": Forbidden forbidden-fixture conns=0
+[proxy] CONNECT 127.0.0.1:34001 DENY 127.0.0.1 denied: loopback lab port 34001 not listed
+[E6] ok   go/connect-to-proxy-own-port-denied :: err=Get "https://127.0.0.1:34001/ok": Forbidden (own listener is never an allowed target)
+[proxy] GET http://mixed.test:41525/ok DENY 10.0.0.5 denied: private/unique-local address
+[E6] ok   go/plain-mixed-answer-denied :: status=403 body="denied: 10.0.0.5 denied: private/unique-local address"
+[proxy] CONNECT mixed.test:32901 DENY 10.0.0.5 denied: private/unique-local address
+[E6] ok   go/https-mixed-answer-denied :: err=Get "https://mixed.test:32901/ok": Forbidden
+[E6] ok   go/denied-targets-never-contacted :: fixture connections before=[1 1 0] after=[1 1 0]
+[proxy] CONNECT a.test:32901 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:32901 (request headers seen: [User-Agent])
+[E6] OBS  CONNECT a.test but TLS SNI=b.test and Host=a.test: status=200 body="fixture=tls host=a.test:32901 path=/ok remote=127.0.0.1:44194 proto=HTTP/1.1 sni=b.test" err=<nil>
+[E6] ok   go/https-sni-differs-from-connect-host-not-detectable :: server saw SNI b.test; the proxy log shows only CONNECT a.test (SNI not inspected)
+[proxy] TUNNEL a.test:32901 closed c2s_bytes=512 s2c_bytes=1067 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[proxy] GET http://evil.test/ok DENY resolution failed: lookup evil.test on 127.0.0.53:53: no such host
+[E6] OBS  Go client with req.Host=evil.test: net/http rewrites the absolute-URI target to evil.test, so the proxy evaluated evil.test instead: status=403 body="denied: resolution failed: lookup evil.test on 127.0.0.53:53: no such host"
+[E6] ok   go/req.Host-override-changes-evaluated-target :: the override is evaluated as the target, not smuggled behind an allowed one
+[proxy] GET http://allowed.test:41525/ok ALLOW addrs=[127.0.0.1] upstream_host_sent=allowed.test:41525 status=200
+[E6] OBS  raw absolute-URI request with mismatching 'Host: evil.test': response="HTTP/1.1 200 OK|Content-Length: 90|Content-Type: text/plain; charset=utf-8|Date: Sun, 15 Nov 2026 15:43:07 GMT|Connection: close||fixture=plain host=allowed.test:41525 path=/ok remote=127.0.0.1:39848 proto=HTTP/1.1 sni=\n"
+[E6] ok   raw/host-header-mismatch-neutralized :: upstream saw Host=allowed.test:41525 (the client's Host header is discarded by net/http's server and replaced by the evaluated authority)
+[proxy] CONNECT 127.0.0.1:41525 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:41525 (request headers seen: [])
+[E6] OBS  E9 evidence: CONNECT 127.0.0.1:41525 then non-HTTP bytes -> reply="HTTP/1.1 200 Connection Established||HTTP/1.1 400 Bad Request|Content-Type: text/plain; charset=utf-8|Connection: close||400 Bad Request"
+[E6] ok   e9/connect-relays-arbitrary-bytes-to-allowed-port :: the proxy relayed bytes it cannot interpret; policy is host:port only, protocol is not enforced
+[proxy] TUNNEL 127.0.0.1:41525 closed c2s_bytes=19 s2c_bytes=103 first_client_byte=0x4e
+[proxy] CONNECT allowed.test:32901 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:32901 (request headers seen: [User-Agent])
+[E6] OBS  HTTPS same-host redirect (client does not follow here): status=302
+[proxy] TUNNEL allowed.test:32901 closed c2s_bytes=542 s2c_bytes=955 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[proxy] CONNECT allowed.test:32901 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:32901 (request headers seen: [User-Agent])
+[E6] OBS  HTTPS redirect to a denied name, status seen by client=302 (the redirect itself passed through the tunnel unseen)
+[proxy] TUNNEL allowed.test:32901 closed c2s_bytes=572 s2c_bytes=979 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[proxy] CONNECT allowed.test:32901 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:32901 (request headers seen: [Proxy-Connection User-Agent])
+[proxy] TUNNEL allowed.test:32901 closed c2s_bytes=1766 s2c_bytes=1222 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[E6] ok   curl/https-allowed :: exit=0 out="fixture=tls host=allowed.test:32901 path=/ok remote=127.0.0.1:44226 proto=HTTP/1.1 sni=allowed.test\n\n[curl http_code=200 num_connects=1 exit-info=0 proxy_connect=200]"
+[proxy] GET http://allowed.test:41525/ok ALLOW addrs=[127.0.0.1] upstream_host_sent=allowed.test:41525 status=200
+[E6] ok   curl/http-allowed :: exit=0 out="fixture=plain host=allowed.test:41525 path=/ok remote=127.0.0.1:39862 proto=HTTP/1.1 sni=\n\n[curl http_code=200 num_connects=1 exit-info=0 proxy_connect=000]"
+[proxy] CONNECT deny4.test:32901 DENY 10.0.0.5 denied: private/unique-local address
+[E6] ok   curl/denied/https://deny4.test:32901/ :: exit=7 out="curl: (7) CONNECT tunnel failed, response 403  [curl http_code=000 num_connects=1 exit-info=7 proxy_connect=403]"
+[proxy] GET http://deny4.test:41525/ DENY 10.0.0.5 denied: private/unique-local address
+[E6] ok   curl/denied/http://deny4.test:41525/ :: exit=0 out="denied: 10.0.0.5 denied: private/unique-local address  [curl http_code=403 num_connects=1 exit-info=0 proxy_connect=000]"
+[proxy] CONNECT 127.0.0.1:36701 DENY 127.0.0.1 denied: loopback lab port 36701 not listed
+[E6] ok   curl/denied/https://127.0.0.1:36701/ :: exit=7 out="curl: (7) CONNECT tunnel failed, response 403  [curl http_code=000 num_connects=1 exit-info=7 proxy_connect=403]"
+[proxy] GET http://127.0.0.1:36701/ DENY 127.0.0.1 denied: loopback lab port 36701 not listed
+[E6] ok   curl/denied/http://127.0.0.1:36701/ :: exit=0 out="denied: 127.0.0.1 denied: loopback lab port 36701 not listed  [curl http_code=403 num_connects=1 exit-info=0 proxy_connect=000]"
+[proxy] CONNECT mixed.test:32901 DENY 10.0.0.5 denied: private/unique-local address
+[E6] ok   curl/denied/https://mixed.test:32901/ :: exit=7 out="curl: (7) CONNECT tunnel failed, response 403  [curl http_code=000 num_connects=1 exit-info=7 proxy_connect=403]"
+[proxy] GET http://mixed.test:41525/ DENY 10.0.0.5 denied: private/unique-local address
+[E6] ok   curl/denied/http://mixed.test:41525/ :: exit=0 out="denied: 10.0.0.5 denied: private/unique-local address  [curl http_code=403 num_connects=1 exit-info=0 proxy_connect=000]"
+[E6] ok   curl/denied-never-contacted :: forbidden fixture conns=0
+[proxy] CONNECT allowed.test:32901 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:32901 (request headers seen: [Proxy-Connection User-Agent])
+[proxy] CONNECT deny4.test:32901 DENY 10.0.0.5 denied: private/unique-local address
+[proxy] TUNNEL allowed.test:32901 closed c2s_bytes=1814 s2c_bytes=1117 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[E6] ok   curl/https-redirect-to-denied-name-refused-at-new-CONNECT :: exit=7 out="curl: (7) CONNECT tunnel failed, response 403  [curl http_code=000 num_connects=2 exit-info=7 proxy_connect=403]"
+[E6] OBS  proxy log for that redirect: CONNECT allowed.test:32901 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:32901 (request headers seen: [Proxy-Connection User-Agent])
+[E6] OBS  proxy log for that redirect: CONNECT deny4.test:32901 DENY 10.0.0.5 denied: private/unique-local address
+[E6] OBS  proxy log for that redirect: TUNNEL allowed.test:32901 closed c2s_bytes=1814 s2c_bytes=1117 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[proxy] CONNECT allowed.test:32901 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:32901 (request headers seen: [Proxy-Connection User-Agent])
+[proxy] TUNNEL allowed.test:32901 closed c2s_bytes=1890 s2c_bytes=1335 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[E6] OBS  curl -L same-host redirect: exit=0 out="fixture=tls host=allowed.test:32901 path=/ok remote=127.0.0.1:44236 proto=HTTP/1.1 sni=allowed.test  [curl http_code=200 num_connects=1 exit-info=0 proxy_connect=200]" server requests +2
+[E6] OBS  proxy log for same-host redirect: CONNECT allowed.test:32901 ALLOW addrs=[127.0.0.1] remote=127.0.0.1:32901 (request headers seen: [Proxy-Connection User-Agent])
+[E6] OBS  proxy log for same-host redirect: TUNNEL allowed.test:32901 closed c2s_bytes=1890 s2c_bytes=1335 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+[E6] ok   proxy-has-no-per-hop-visibility-for-https :: server handled 2 requests (302 + final) over 1 CONNECT: the proxy cannot see the redirect or the path
+[proxy] GET http://allowed.test:41525/ok ALLOW addrs=[127.0.0.1] upstream_host_sent=allowed.test:41525 status=200
+[E6] ok   curl/host-header-override-neutralized :: out="fixture=plain host=allowed.test:41525 path=/ok remote=127.0.0.1:39876 proto=HTTP/1.1 sni=  [curl http_code=200 num_connects=1 exit-info=0 proxy_connect=000]"
+[proxy] GET http://allowed.test:41525/ok DENY 127.0.0.1 denied: loopback address (lab mode off)
+[proxy] CONNECT allowed.test:32901 DENY 127.0.0.1 denied: loopback address (lab mode off)
+[E6] ok   lab-off/proxy-denies-everything-no-connect :: plain status=403 https err=Get "https://allowed.test:32901/ok": Forbidden conns before=[5 7 0] after=[5 7 0]
+[E6] OBS  sample proxy log: TUNNEL allowed.test:32901 closed c2s_bytes=524 s2c_bytes=1081 first_client_byte=0x16 (TLS handshake record; contents not parsed, SNI not inspected)
+VERDICT E6 PASS | proxy enforces address/port/mixed-answer policy per CONNECT and per absolute-URI request; HTTPS redirects are only enforced per new CONNECT (29 checks)

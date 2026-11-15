@@ -1,0 +1,5 @@
+ok  	spike/egress	0.003s
+?   	spike/egress/cmd/hostside	[no test files]
+?   	spike/egress/cmd/probe	[no test files]
+?   	spike/egress/cmd/relay	[no test files]
+?   	spike/egress/cmd/spike	[no test files]

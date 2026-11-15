@@ -1,0 +1,101 @@
+# go=go1.27.3 os=linux/amd64 time=2026-11-15T22:43:07+07:00
+[E4] OBS  fixtures: P1=127.0.0.1:35263 (lab-listed)  P2=127.0.0.1:36527 (NOT lab-listed in the main policy)
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=301&loc=http%3A%2F%2F169.254.169.254%3A80%2Flatest%2Fmeta-data%2F -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=301 loc="http://169.254.169.254:80/latest/meta-data/" next=redirect to http://169.254.169.254:80/latest/meta-data/ (evaluated as next hop)
+[E4] OBS  hop2 http://169.254.169.254:80/latest/meta-data/ -> DENY (169.254.169.254 denied: cloud metadata address) addrs=[] remote= status=0 loc="" next=refused: policy
+[E4] ok   lab-on/abs URL, metadata address (301) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: 169.254.169.254 denied: cloud metadata address
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F10.0.0.5%3A80%2F -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="http://10.0.0.5:80/" next=redirect to http://10.0.0.5:80/ (evaluated as next hop)
+[E4] OBS  hop2 http://10.0.0.5:80/ -> DENY (10.0.0.5 denied: private/unique-local address) addrs=[] remote= status=0 loc="" next=refused: policy
+[E4] ok   lab-on/abs URL, private address (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: 10.0.0.5 denied: private/unique-local address
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=307&loc=%2F%2F127.0.0.1%3A35263%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=307 loc="//127.0.0.1:35263/ok" next=redirect to http://127.0.0.1:35263/ok (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:35263/ok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=200 loc="" next=final
+[E4] ok   lab-on/scheme-relative //host:port, listed port (307) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=308&loc=%2F%2F127.0.0.1%3A36527%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=308 loc="//127.0.0.1:36527/ok" next=redirect to http://127.0.0.1:36527/ok (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:36527/ok -> DENY (127.0.0.1 denied: loopback lab port 36527 not listed) addrs=[] remote= status=0 loc="" next=refused: policy
+[E4] ok   lab-on/scheme-relative //host:port, unlisted port (308) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: 127.0.0.1 denied: loopback lab port 36527 not listed
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%5C%5C127.0.0.1%3A35263%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="http:\\\\127.0.0.1:35263/ok" next=refused: control/space/backslash in Location (ambiguous)
+[E4] ok   lab-on/backslash form http:\\host (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: control/space/backslash in Location (ambiguous)
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=301&loc=%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=301 loc="/ok" next=redirect to http://127.0.0.1:35263/ok (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:35263/ok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=200 loc="" next=final
+[E4] ok   lab-on/relative path /ok (301) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="/ok" next=redirect to http://127.0.0.1:35263/ok (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:35263/ok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=200 loc="" next=final
+[E4] ok   lab-on/relative path /ok (302) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=307&loc=%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=307 loc="/ok" next=redirect to http://127.0.0.1:35263/ok (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:35263/ok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=200 loc="" next=final
+[E4] ok   lab-on/relative path /ok (307) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=308&loc=%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=308 loc="/ok" next=redirect to http://127.0.0.1:35263/ok (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:35263/ok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=200 loc="" next=final
+[E4] ok   lab-on/relative path /ok (308) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=303&loc=%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=303 loc="/ok" next=redirect to http://127.0.0.1:35263/ok (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:35263/ok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=200 loc="" next=final
+[E4] ok   lab-on/relative path /ok (303) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F127.0.0.1%3A36527%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="http://127.0.0.1:36527/ok" next=redirect to http://127.0.0.1:36527/ok (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:36527/ok -> DENY (127.0.0.1 denied: loopback lab port 36527 not listed) addrs=[] remote= status=0 loc="" next=refused: policy
+[E4] ok   lab-on/different port, same host, not listed (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: 127.0.0.1 denied: loopback lab port 36527 not listed
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F127.0.0.1%3A35263%4010.0.0.5%2F -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="http://127.0.0.1:35263@10.0.0.5/" next=redirect to http://127.0.0.1:35263@10.0.0.5/ (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:35263@10.0.0.5/ -> DENY (userinfo not allowed) addrs=[] remote= status=0 loc="" next=refused: not evaluable
+[E4] ok   lab-on/userinfo trick http://127.0.0.1:P1@10.0.0.5/ (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: userinfo not allowed
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F%5B%3A%3A1%2F -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=0 loc="" next=request failed: Get "http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F%5B%3A%3A1%2F": failed to parse Location header "http://[::1/": parse "http://[::1/": missing ']' in host
+[E4] ok   lab-on/unparseable http://[::1/ (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=Get "http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F%5B%3A%3A1%2F": failed to parse Location header "http:...
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F%25zz%2F -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=0 loc="" next=request failed: Get "http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F%25zz%2F": failed to parse Location header "http://%zz/": parse "http://%zz/": invalid URL escape "%zz"
+[E4] ok   lab-on/bad escape http://%zz/ (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=Get "http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F%25zz%2F": failed to parse Location header "http://%zz...
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F%2531%2532%2537.0.0.1%3A35263%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=0 loc="" next=request failed: Get "http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F%2531%2532%2537.0.0.1%3A35263%2Fok": failed to parse Location header "http://%31%32%37.0.0.1:35263/ok": parse "http://%31%32%37.0.0.1:35263/ok": invalid URL escape "%31"
+[E4] ok   lab-on/escaped host %31%32%37.0.0.1 (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=Get "http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F%2531%2532%2537.0.0.1%3A35263%2Fok": failed to parse L...
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F127.1%3A35263%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="http://127.1:35263/ok" next=redirect to http://127.1:35263/ok (evaluated as next hop)
+[E4] OBS  hop2 http://127.1:35263/ok -> DENY (numeric last label "1" (IPv4 shorthand)) addrs=[] remote= status=0 loc="" next=refused: not evaluable
+[E4] ok   lab-on/IPv4 shorthand 127.1 (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: numeric last label "1" (IPv4 shorthand)
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F0x7f.0.0.1%3A35263%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="http://0x7f.0.0.1:35263/ok" next=redirect to http://0x7f.0.0.1:35263/ok (evaluated as next hop)
+[E4] OBS  hop2 http://0x7f.0.0.1:35263/ok -> DENY (numeric last label "1" (IPv4 shorthand)) addrs=[] remote= status=0 loc="" next=refused: not evaluable
+[E4] ok   lab-on/hex IPv4 0x7f.0.0.1 (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: numeric last label "1" (IPv4 shorthand)
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc= -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="" next=refused: empty Location
+[E4] ok   lab-on/empty Location (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: empty Location
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=ftp%3A%2F%2F127.0.0.1%3A35263%2F -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="ftp://127.0.0.1:35263/" next=redirect to ftp://127.0.0.1:35263/ (evaluated as next hop)
+[E4] OBS  hop2 ftp://127.0.0.1:35263/ -> DENY (unsupported scheme "ftp") addrs=[] remote= status=0 loc="" next=refused: not evaluable
+[E4] ok   lab-on/ftp scheme (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: unsupported scheme "ftp"
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=file%3A%2F%2F%2Fetc%2Fpasswd -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="file:///etc/passwd" next=redirect to file:///etc/passwd (evaluated as next hop)
+[E4] OBS  hop2 file:///etc/passwd -> DENY (unsupported scheme "file") addrs=[] remote= status=0 loc="" next=refused: not evaluable
+[E4] ok   lab-on/file scheme (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: unsupported scheme "file"
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=javascript%3Aalert%281%29 -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="javascript:alert(1)" next=refused: opaque Location
+[E4] ok   lab-on/javascript: scheme (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: opaque Location
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2Fnxdomain.test%3A35263%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="http://nxdomain.test:35263/ok" next=redirect to http://nxdomain.test:35263/ok (evaluated as next hop)
+[E4] OBS  hop2 http://nxdomain.test:35263/ok -> DENY (resolution failed: lookup nxdomain.test on 127.0.0.53:53: no such host) addrs=[] remote= status=0 loc="" next=refused: policy
+[E4] ok   lab-on/name that fails to resolve (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: resolution failed: lookup nxdomain.test on 127.0.0.53:53: no such host
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F127.0.0.1%3A35263%2Fok+x -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="http://127.0.0.1:35263/ok x" next=refused: control/space/backslash in Location (ambiguous)
+[E4] ok   lab-on/whitespace in Location (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: control/space/backslash in Location (ambiguous)
+[E4] OBS  --- same table via Transport.RoundTrip (no http.Client); note which Location values http.Client turns into its own errors above ---
+[E4] ok   lab-on-roundtrip/abs URL, metadata address (301) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: 169.254.169.254 denied: cloud metadata address
+[E4] ok   lab-on-roundtrip/abs URL, private address (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: 10.0.0.5 denied: private/unique-local address
+[E4] ok   lab-on-roundtrip/scheme-relative //host:port, listed port (307) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] ok   lab-on-roundtrip/scheme-relative //host:port, unlisted port (308) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: 127.0.0.1 denied: loopback lab port 36527 not listed
+[E4] ok   lab-on-roundtrip/backslash form http:\\host (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: control/space/backslash in Location (ambiguous)
+[E4] ok   lab-on-roundtrip/relative path /ok (301) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] ok   lab-on-roundtrip/relative path /ok (302) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] ok   lab-on-roundtrip/relative path /ok (307) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] ok   lab-on-roundtrip/relative path /ok (308) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] ok   lab-on-roundtrip/relative path /ok (303) :: redirect target contacted=true (expected true), P2 contacted=false, err=<nil>
+[E4] ok   lab-on-roundtrip/different port, same host, not listed (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: 127.0.0.1 denied: loopback lab port 36527 not listed
+[E4] ok   lab-on-roundtrip/userinfo trick http://127.0.0.1:P1@10.0.0.5/ (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: userinfo not allowed
+[E4] ok   lab-on-roundtrip/unparseable http://[::1/ (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: unparseable Location: parse "http://[::1/": missing ']' in host
+[E4] ok   lab-on-roundtrip/bad escape http://%zz/ (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: unparseable Location: parse "http://%zz/": invalid URL escape "%zz"
+[E4] ok   lab-on-roundtrip/escaped host %31%32%37.0.0.1 (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: unparseable Location: parse "http://%31%32%37.0.0.1:35263/ok": invalid URL escape "%31"
+[E4] ok   lab-on-roundtrip/IPv4 shorthand 127.1 (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: numeric last label "1" (IPv4 shorthand)
+[E4] ok   lab-on-roundtrip/hex IPv4 0x7f.0.0.1 (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: numeric last label "1" (IPv4 shorthand)
+[E4] ok   lab-on-roundtrip/empty Location (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: empty Location
+[E4] ok   lab-on-roundtrip/ftp scheme (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: unsupported scheme "ftp"
+[E4] ok   lab-on-roundtrip/file scheme (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: unsupported scheme "file"
+[E4] ok   lab-on-roundtrip/javascript: scheme (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: opaque Location
+[E4] ok   lab-on-roundtrip/name that fails to resolve (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=denied: resolution failed: lookup nxdomain.test on 127.0.0.53:53: no such host
+[E4] ok   lab-on-roundtrip/whitespace in Location (302) :: redirect target contacted=false (expected false), P2 contacted=false, err=redirect not followed: control/space/backslash in Location (ambiguous)
+[E4] OBS  hop1 http://127.0.0.1:35263/loop/a -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="/loop/b" next=redirect to http://127.0.0.1:35263/loop/b (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:35263/loop/b -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="/loop/a" next=redirect to http://127.0.0.1:35263/loop/a (evaluated as next hop)
+[E4] OBS  hop3 http://127.0.0.1:35263/loop/a -> DENY (redirect loop) addrs=[] remote= status=0 loc="" next=refused: loop
+[E4] ok   lab-on/loop-a-b-a :: hops=3 last="redirect loop"
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=http%3A%2F%2F127.0.0.1%3A36527%2Fok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:35263 status=302 loc="http://127.0.0.1:36527/ok" next=redirect to http://127.0.0.1:36527/ok (evaluated as next hop)
+[E4] OBS  hop2 http://127.0.0.1:36527/ok -> ALLOW (all addresses allowed) addrs=[127.0.0.1] remote=127.0.0.1:36527 status=200 loc="" next=final
+[E4] ok   lab-on-P2-listed/different-port-is-new-target-and-followed :: body="fixture=P2 host=127.0.0.1:36527 path=/ok remote=127.0.0.1:46904 proto=HTTP/1.1 sni="
+[E4] OBS  CONTROL default http.Client follows //127.0.0.1:P2 -> err=<nil> body="fixture=P2 host=127.0.0.1:36527 path=/ok remote=127.0.0.1:46908 proto=HTTP/1.1 sni=" P2.conns 1 -> 2
+[E4] ok   control-default-client-follows-unlisted-port :: default client has no policy and followed the redirect
+[E4] OBS  CONTROL default http.Client on backslash form -> err=Get "http:\\\\127.0.0.1:35263/ok": http: no Host in request URL (Go's parser treats http:\\host as opaque; a browser would treat it as http://host/ — parsers disagree, so the spike refuses it)
+[E4] OBS  hop1 http://127.0.0.1:35263/r?code=302&loc=%2Fok -> DENY (127.0.0.1 denied: loopback address (lab mode off)) addrs=[] remote= status=0 loc="" next=refused: policy
+[E4] ok   lab-off/first-hop-denied-no-connect :: err=denied: 127.0.0.1 denied: loopback address (lab mode off)
+VERDICT E4 PASS | every hop is canonicalized and fully evaluated before it is followed; ambiguous Locations are refused (50 checks)

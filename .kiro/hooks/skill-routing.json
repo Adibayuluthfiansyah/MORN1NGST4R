@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "skill-routing-gate",
+      "description": "Appends a routing reminder to every user prompt so skill loading does not depend on skill auto-discovery. Policy lives in .kiro/steering/skill-routing.md.",
+      "trigger": "UserPromptSubmit",
+      "action": {
+        "type": "agent",
+        "prompt": "[skill-routing gate] Before any other tool call or answer, apply .kiro/steering/skill-routing.md: classify this request, then call load_resource (skill::<name>) for every skill its routing table lists for that class. Phrases like \"one message\", \"do not write files\" or \"no commands\" limit your output, not skill loading: loading a skill is read-only. Start the reply with the Route line, listing every table skill you did not load with the reason. Subagents ignore this gate."
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+--- controls on the HOST (same targets must be reachable from the host namespace, otherwise a namespace 'FAIL' proves nothing)
+host netns: net:[4026531833]
+PROBE OK tcp 127.0.0.1:38711 :: connected to 127.0.0.1:38711 elapsed=0ms
+PROBE OK tcp [::1]:38711 :: connected to [::1]:38711 elapsed=0ms
+PROBE OK abstract ms-spike-egress-abs-337604 :: connected, banner="ABSTRACT-SOCKET-OK"
+PROBE OK dnsudp 127.0.0.1:42635 allowed.test :: DNS reply rcode=0 answers=1 elapsed=0ms
+PROBE FAIL udp 127.0.0.1:443 :: read: read udp 127.0.0.1:58225->127.0.0.1:443: read: connection refused elapsed=0ms
+fixture=ALLOWED host=127.0.0.1:38711 path=/ok remote=127.0.0.1:47536 proto=HTTP/1.1 sni=
+--- end controls

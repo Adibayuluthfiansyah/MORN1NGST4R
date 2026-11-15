@@ -1,0 +1,347 @@
+--- a/.kiro/steering/security.md
++++ b/.kiro/steering/security.md
+@@ -35,6 +35,75 @@
+ 
+ Unknown or ambiguous targets must not be tested automatically.
+ 
++Scope rules must follow a grammar documented in an architecture
++decision record. A rule outside the grammar must be refused at
++registration. The first release supports only domain, wildcard, IP,
++and CIDR rules. A URL path, regular expression, unsupported scheme,
++or any other construct must be refused. Scope must never be widened to
++make an unsupported rule fit.
++
++Rules and targets are compared only in canonical form. A target that
++fails to parse, or has more than one possible canonical form, is
++ambiguous and must be denied. A target that no in-scope rule matches
++must be denied.
++
++Out-of-scope rules and exclusions take precedence over in-scope rules.
++
++A wildcard rule matches one or more labels below its base and never
++the base itself. A wildcard whose base is a public suffix, or cannot
++be confidently distinguished from one, must be refused at
++registration. A confirmation by the user alone must not make such a
++wildcard acceptable. Until a reviewed public suffix source is in
++place, every wildcard rule must be refused. No temporary or
++permissive wildcard handling is allowed.
++
++A rule without a port covers only ports 80 and 443. An exclusion
++without a port covers all ports. A redirect to a different port is a
++new target.
++
++A CIDR rule must be refused when its prefix is shorter than the minimum
++set by security policy. The default minimum is /24 for IPv4 and /48
++for IPv6. The minimum changes only through an explicit security policy
++change, never through AI output.
++
++Every address a target name resolves to, both A and AAAA results,
++must be evaluated. If any address is denied, the target is denied.
++
++The denied address list must be generated from the IANA
++special-purpose address registries and must add multicast addresses
++explicitly. It includes loopback, private, link-local, unique-local,
++multicast, reserved, and cloud metadata addresses. Addresses that are
++not globally routable unicast addresses must be denied. The cloud
++metadata addresses 169.254.169.254 and fd00:ec2::254 must always be
++denied.
++
++A denied address class is allowed only for an operation whose own
++target is a literal address, a CIDR range, or a hostname that a human
++registered as a lab target, with an audit event. The registration
++records the exact target and its kind, and it applies only to an
++operation whose own target is that exact target of that kind. This
++keeps explicitly registered local labs possible (see section 17). A
++public hostname that resolves into a registered lab range does not
++inherit the registration. Registering an ordinary hostname does not
++allow its address. A loopback lab registration must list its ports
++explicitly. Link-local, cloud metadata, and unspecified addresses must
++never be authorized. The application's own listeners and
++infrastructure endpoints (the API, the web server, the database, and
++any other endpoint the application runs or depends on) must never be
++authorized as testing targets. An explicit registration must not
++override this. A lab registration never relaxes process isolation
++(section 10).
++
++The connection must go to an address that passed evaluation. A later
++lookup must not change it. A name that resolves, through a CNAME or
++otherwise, into an excluded or non-public address must be denied.
++Every redirect must be treated as a new target and evaluated in full
++before it is followed. A redirect that cannot be fully evaluated must
++not be followed.
++
++A tool may reach the network only through an enforcement path that
++applies the rules of this section.
++
+ ## 3. Policy Enforcement
+ 
+ The backend policy engine is the mandatory authorization boundary.
+@@ -56,6 +125,13 @@
+ Workers must not trust previously generated plans without
+ revalidating execution policy.
+ 
++Scope and approval must be evaluated before scheduling and again
++immediately before the tool process is launched.
++
++Changing scope or revoking an approval must cancel queued operations
++and stop running operations within a configured time limit. For the
++revocation of an approval, the limit is 30 seconds.
++
+ ## 4. Approval Model
+ 
+ Risky operations require explicit approval.
+@@ -71,6 +147,36 @@
+ 
+ A general approval must not authorize unrelated operations.
+ 
++Each approval must have an expiry and a maximum number of uses.
++Approvals must be revocable.
++
++One use is consumed per approval and job. The use is consumed
++atomically when the worker claims the job, and database constraints
++must prevent a second use for the same job. Retries of that job share
++the use. A job has at most three execution attempts in total,
++including the first, unless explicit security policy sets a different
++maximum. The maximum attempt count is part of the canonical approval
++record. Changing the default requires explicit security policy
++approval. An intrusive operation must not be retried automatically.
++Expiry, revocation, and the match between the operation and the
++approval must be checked again immediately before the tool process is
++launched. A running operation must not exceed the duration limit bound
++in the approval. Revocation must stop queued and running operations
++within 30 seconds.
++
++The expiry, use count, and duration defaults for each risk class are
++set by explicit security policy. A change to them requires owner
++approval.
++
++Approval of an intrusive operation requires the approver to
++authenticate again, in the form the authentication design defines.
++An AI agent or an API token must not be able to approve.
++
++The approval screen must be rendered only from the canonical
++operation. Text written by an AI must not be shown as the basis for
++approval. The worker must verify that the operation matches the
++approval before it starts.
++
+ ## 5. AI Security
+ 
+ AI output is untrusted.
+@@ -87,6 +193,22 @@
+ 
+ AI recommendations must remain distinguishable from observed facts.
+ 
++Data sent to an AI provider must be limited to what the task requires.
++
++A provider whose endpoint is not on this machine's loopback interface
++is a remote provider. A provider on the local network is a remote
++provider. Target data, evidence, and findings must not be sent to a
++remote provider unless a human has configured that provider for that
++program and has been shown what will be sent.
++
++Credentials and session secrets must never be sent to any provider.
++
++Each transmission must be audited with provider, program, size, and a
++content digest, not the content. A transmission must not occur if
++that audit record cannot be written.
++
++Redaction reduces disclosure but must not be treated as a guarantee.
++
+ ## 6. Credential Protection
+ 
+ Credentials include:
+@@ -115,6 +237,12 @@
+ 
+ Use user-scoped credential access by default.
+ 
++### macOS Desktop
++
++Prefer Keychain.
++
++Use user-scoped credential access by default.
++
+ ### Linux Desktop
+ 
+ Prefer Secret Service-compatible credential storage.
+@@ -154,6 +282,20 @@
+ Do not assume desktop deployment and headless server
+ deployment have identical authentication requirements.
+ 
++A web application served on localhost must not treat the loopback
++interface as trusted.
++
++Requirements for a locally served web application:
++- Listen only on the loopback interface unless remote access is explicitly configured.
++- Set the listen address of the API and of the web server explicitly. Do not rely on a framework default.
++- Authenticate requests.
++- Reject requests whose Host is not in the configured allow-list.
++- Reject state-changing requests whose Origin is missing or not in the configured allow-list.
++- Restrict CORS to explicitly configured origins.
++- Protect state-changing requests against cross-site request forgery.
++- Do not rely on SameSite alone.
++- Require transport encryption and a separate security review for remote access.
++
+ ## 9. Evidence Security
+ 
+ Evidence may contain sensitive data.
+@@ -172,6 +314,17 @@
+ 
+ Treat all external tool output as untrusted data.
+ 
++Evidence, tool output, and reports must not be able to execute when
++displayed or exported.
++
++Requirements:
++- Send a Content-Security-Policy that does not allow inline scripts.
++- Send X-Content-Type-Options: nosniff.
++- Send Content-Disposition: attachment for evidence files.
++- Escape output according to each export format.
++- Neutralize spreadsheet formula prefixes in CSV exports.
++- Never render tool output as HTML in the application origin.
++
+ ## 10. Process and Worker Security
+ 
+ Requirements:
+@@ -185,6 +338,31 @@
+ - Controlled working directories.
+ - Audit execution metadata.
+ 
++Additional requirements:
++- Every tool operation requires filesystem, network, process, IPC, capability, system call, and resource-limit isolation. This includes development use and registered labs.
++- If any isolation mechanism or resource limit is unavailable, the operation must not run. Audit the denial and tell the user which mechanism is missing.
++- No environment variable, configuration flag, development mode, or lab registration may disable or bypass isolation. There is no unsandboxed fallback.
++- A start-up self-test must run the isolation with the production arguments. If it fails, no tool operation may run.
++- Run tools as an unprivileged user without added capabilities.
++- Prevent tools from gaining privileges.
++- Deny tools access to application credentials.
++- Deny tools access to other jobs' directories and to evidence outside their own job directory.
++- Close every inherited file descriptor the tool is not meant to receive.
++- Start tools with an environment built from an allow-list. Point the home and XDG directories into the job directory.
++- Validate arguments against a per-tool schema.
++- Never let a value be interpreted as an option. Reject values that begin with a dash, values in @file form, values that contain a carriage return or line feed, and any Host header override.
++- Never pass secrets in arguments or environment variables. Deliver them through an owner-only file or an inherited file descriptor.
++- Redact arguments before they are stored or logged.
++- Pin tool binaries and templates to a reviewed version with a SHA-256 digest.
++- Verify the pinned binary against its digest before execution.
++- Run the exact bytes that were verified, from an absolute path. Hashing a mutable path and then running the path does not satisfy this.
++- A tool that cannot meet the argument, secret, or isolation requirements is unsupported for authenticated testing.
++- Declare every network destination other than the target in the tool integration.
++- Govern declared destinations by policy.
++- Keep automatic updates, telemetry, callbacks, and undeclared destinations disabled unless a human policy setting enables them.
++- A tool that cannot disable or govern undeclared network destinations is unsupported.
++- A human must enable each declared passive reconnaissance source once for each program. Show the researcher what target information is sent to each source.
++
+ Do not execute arbitrary commands directly from AI-generated strings.
+ 
+ ## 11. API Security
+@@ -208,6 +386,7 @@
+ - Parameterized queries.
+ - Migration review.
+ - Backup considerations.
++- Backups of evidence or audit data keep permissions no wider than the source.
+ - Restricted database access.
+ - No plaintext API keys.
+ - No unnecessary sensitive data retention.
+@@ -225,12 +404,33 @@
+ - Evidence access.
+ - Finding state changes.
+ - Credential configuration changes.
++- Scope and policy changes.
++- Lab registrations and passive source enablement.
++- Session revocation.
++- Evidence and report export.
++- AI provider transmissions.
++- Retention purges.
++- Credential access (never the credential value).
++
++Denied operations and failed authentications must also be audited.
++
++An operation must not start if its audit record cannot be written.
++Cancellation, revocation, scope narrowing, session revocation, and
++denials must still take effect when audit cannot be written. The
++missing record must be retried and reported.
++
++The database role used by the server and worker must have INSERT and
++SELECT but not UPDATE, DELETE, or TRUNCATE on audit tables. Retention
++purges must run under a separate role and must be audited.
+ 
+ Logs must not contain:
+ - API keys.
+ - Passwords.
+ - Access tokens.
+ - Refresh tokens.
++- Database credentials.
++- Third-party authentication secrets.
++- Target session cookies and authorization headers.
+ - Unredacted sensitive request bodies.
+ 
+ ## 14. Supply Chain Security
+@@ -252,6 +452,21 @@
+ - Protect evidence directories.
+ - Avoid exposing backend services unnecessarily.
+ 
++### Local Web Application
++Applies to the MVP localhost deployment. It is a separate deployment mode with its own list. It does not drop a Desktop protection because it runs in a browser. A Desktop control that applies to a locally run application is repeated below as a shared protection. A control that depends on a native desktop application is Desktop-specific and does not apply.
++
++Shared with the Desktop mode:
++- Restrict local data access to the owning user, including the database and local files.
++- Protect evidence directories with owner-only permissions.
++- Avoid exposing backend services unnecessarily. Do not expose them beyond the loopback interface unless remote access is explicitly configured and separately reviewed.
++- Use platform credential storage. On Linux this is Secret Service-compatible storage as in section 7. If it is unavailable, credential-storage features must fail closed and the user must be told the available alternatives. Never fall back to plaintext.
++
++Specific to the local web application:
++- Bind the API and the web server to the loopback interface explicitly. Do not rely on a framework default.
++- Apply the localhost requirements in section 8.
++
++Desktop-specific and not applicable here: controls that depend on a native desktop application shell or launcher, and the Windows and macOS credential stores, which stay future compatibility goals.
++
+ ### Headless Server
+ - Use dedicated service accounts.
+ - Restrict filesystem permissions.
+@@ -278,6 +493,19 @@
+ - API authorization.
+ - Audit event generation.
+ - Cross-platform behavior.
++- Behavior on each supported platform.
++- Scope parsing and normalization.
++- Wildcard, public suffix, port, and CIDR rule handling.
++- Resolved-address and redirect enforcement.
++- Approval expiry, bounded use, single consumption per job, and revocation.
++- Cancellation on scope change or revocation.
++- Tool argument and secret handling.
++- Denial when isolation is unavailable.
++- No isolation bypass through a flag, an environment variable, or a lab registration.
++- Audit write failure and append-only enforcement.
++- AI data egress and provider enablement.
++- Output escaping and download headers.
++- Localhost request validation (Host, Origin, and CSRF).
+ 
+ ## 17. Authorized Testing
+ 
+@@ -303,3 +531,26 @@
+ 
+ Do not consider a security feature complete without
+ appropriate tests and review.
++
++## 19. Decision traceability
++
++Each requirement area added in the security decision rounds maps to
++the decisions that approved it. The register is in
++`.kiro/steering/architecture.md` section 19. The owner decisions of
++Round 2 and Round 3 are recorded in
++`docs/decisions/0001-owner-security-decisions-round-2.md`. The
++detailed semantics are in `docs/decisions/pending/S1-security-semantics.md`.
++
++| Requirement area | Sections here | Decisions | Related proposals and open items |
++| --- | --- | --- | --- |
++| Scope grammar, wildcards, ports, CIDR minimum, canonicalization | 2 | D-34 to D-38 | O-24, O-32, O-33 |
++| Resolved addresses, lab registration, own listeners, redirects | 2 | D-32, D-39, D-40 | P-24, O-07, O-34 |
++| Egress enforcement direction | 2, 10 | D-41 | O-07 |
++| Approval lifecycle, retry, consumption, revocation | 3, 4 | D-30, D-45 | P-30, P-31, O-06, O-35 |
++| AI provider data egress | 5 | D-46 | P-34, O-10, O-36 |
++| Localhost web application | 8, 15 | D-33 | P-19, P-22 (superseded), O-03, O-16 |
++| Tool isolation, no bypass, resource limits | 10 | D-31, D-42 | O-13, O-22 |
++| Tool invocation hygiene | 10 | D-43 | P-25 |
++| Non-target destinations, passive sources | 10 | D-44 | P-26, O-28 |
++| Output hardening | 9 | none yet | P-35 |
++| Audit integrity and events | 13 | none yet | P-33 |
