@@ -1,6 +1,6 @@
 # MORN1NGST4R threat model (MVP: localhost web application on Linux)
 
-Status: draft for owner review, revised in Round 6 and in the design hardening round (2026-11-16). Written before any application code exists. Round 6 re-read every row against the decisions D-63 to D-85, with extra attention to T-01 to T-06, T-14 and T-24, added T-71 (first-run takeover) and T-72 (repository exposure), moved six rows to a stronger status where a decision closed their gap, and recorded the accepted risks of D-78. The status "Mitigated and tested" is still used for no row. Evidence cut-off: the documents and spike records dated 2026-11-15. This file is the standalone threat model that `security.md` section 18 and `docs/decisions/pending/B1-security-review.md` ask for. It records threats and gaps. It does not change any owner decision, steering file or ADR.
+Status: draft for owner review, revised in Round 6 and in the design hardening round (2026-11-16). Written before any application code existed. The Phase 1 scaffold that followed is described under "What exists today". Round 6 re-read every row against the decisions D-63 to D-85, with extra attention to T-01 to T-06, T-14 and T-24, added T-71 (first-run takeover) and T-72 (repository exposure), moved six rows to a stronger status where a decision closed their gap, and recorded the accepted risks of D-78. The status "Mitigated and tested" is still used for no row. Evidence cut-off: the documents and spike records dated 2026-11-15. This file is the standalone threat model that `security.md` section 18 and `docs/decisions/pending/B1-security-review.md` ask for. It records threats and gaps. It does not change any owner decision, steering file or ADR.
 
 ## 1. Purpose, scope and method
 
@@ -14,7 +14,7 @@ In scope: the MVP described in `product.md` section 10 and `architecture.md` sec
 
 Out of scope: native desktop, Windows, macOS and Linux headless modes (D-18 to D-20), remote access, multi-user operation, Kubernetes, and the correctness of third-party targets. Legal and licensing questions are listed as open questions only.
 
-What exists today: documentation and two throwaway feasibility spikes (`scripts/spikes/sandbox`, `scripts/spikes/egress`) that ran on one reference host. No application code exists. Therefore no control in this document is implemented in the product.
+What exists today: documentation, two throwaway feasibility spikes (`scripts/spikes/sandbox`, `scripts/spikes/egress`) that ran on one reference host, and the Phase 1 scaffold. The scaffold is a Go server skeleton (loopback-only configuration, a Host allow-list, a request id, an error envelope, a redacting logger and two public health routes) and a Next.js shell. It has no authentication, no session, no database, no worker, no job execution, no sandbox, no tool isolation and no scope or approval logic. Its Host allow-list and loopback binding are tested only for the two health routes, so they give partial evidence for T-55, T-56 and T-68 and complete no row. No threat status below was changed because of the scaffold, and every other control in this document is not implemented in the product.
 
 ### 1.3 Method
 
@@ -43,7 +43,7 @@ These definitions are used exactly in the register and the control table.
 
 | Status | Definition |
 | --- | --- |
-| Mitigated and tested | A control is IMPLEMENTED and a test demonstrates it. Because no application code exists, this status is not used for any application control in this document. Count: zero. Round 6 kept it at zero. |
+| Mitigated and tested | A control is IMPLEMENTED and a test demonstrates it. Because no control of this document is implemented and tested end to end, this status is not used for any application control. Count: zero. Round 6 kept it at zero and the Phase 1 scaffold did not change it. |
 | Feasibility shown | The mechanism was exercised in the local spike on the reference host (the spike question id is cited, for example S6 or E3) but is not implemented in the product. The row states what the spike did not cover. |
 | Specified | A requirement or decision exists (security.md section or D-id cited) but nothing is implemented or tested. |
 | Partially specified | A requirement exists but leaves a gap. The row states the gap. |
@@ -381,7 +381,7 @@ Each cell lists the register rows (the number after `T-`) whose boundary and STR
 | Accepted risk | 1 | 1 | 0 | 2 |
 | Total | 35 | 36 | 2 | 73 |
 
-The register has 73 rows. "Mitigated and tested" is zero by construction because no application code exists. Feasibility shown rows were exercised only in the spikes on the reference host. The counts were computed from the table in 7.1 with a script and must be recomputed whenever a row changes.
+The register has 73 rows. "Mitigated and tested" is zero because no control of the register is implemented and tested end to end. The Phase 1 scaffold completes no row. Feasibility shown rows were exercised only in the spikes on the reference host. The counts were computed from the table in 7.1 with a script and must be recomputed whenever a row changes.
 
 ### 7.4 Impact by threat
 

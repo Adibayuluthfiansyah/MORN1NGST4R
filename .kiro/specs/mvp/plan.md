@@ -12,7 +12,7 @@
 
 ## Readiness gate (closed by decision record 0003)
 
-The four gates that blocked M1 are closed by `docs/decisions/0003-foundation-closure-decisions.md`. Nothing in this plan has been implemented. Closing a gate means a decision exists, not that a control works.
+The four gates that blocked M1 are closed by `docs/decisions/0003-foundation-closure-decisions.md`. Apart from the Phase 1 scaffold described below, nothing in this plan has been implemented. Closing a gate means a decision exists, not that a control works.
 
 | Gate | Closed by | State |
 | --- | --- | --- |
@@ -22,6 +22,17 @@ The four gates that blocked M1 are closed by `docs/decisions/0003-foundation-clo
 | 4. Go module path and Go floor | D-65 | Closed. Module path `github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core`, `go 1.26.0`, no `toolchain` line. |
 
 M1 and M2 need only these gates. Everything that touches the network, a sandbox, authentication or an intrusive operation has the extra gates listed per milestone. The decisions that stay open (O-07, O-13, O-22, O-32, O-33, O-35, O-36, O-38) are gates of later milestones and are listed in the milestone map.
+
+## Phase 1 scaffold (existing preparatory work)
+
+On the owner's instruction a scaffold was built before M1. It is not a milestone and it does not start M1. It exists so that later milestones have a module, a server skeleton and a test harness to build on.
+
+- `services/core`: Go module, `cmd/server`, `internal/bootstrap`, `internal/config` (fail-closed environment configuration), a redacting `log/slog` logger, the inbound HTTP adapter (Gin) with the request id, the Host allow-list, the error envelope, an access log and panic recovery, and the dependency-direction test (gate G-arch for the packages that exist).
+- Health and readiness endpoints `GET /api/v1/health/live` and `GET /api/v1/health/ready`, kept in the MVP by D-86 (`docs/decisions/0004-health-endpoints-mvp-decision.md`). Readiness has no probe yet and confirms process initialization only. The database probe is part of M3.
+- `apps/web`: a Next.js App Router shell with a backend status line and the same-origin rewrite. It has no authentication, no generated client and no nonce CSP. Those stay in M13.
+- A `Makefile`, `.env.example` and `docs/development/getting-started.md`.
+
+Not built: authentication, sessions, CSRF and Origin checks (M4), PostgreSQL and migrations (M3), the worker (M7), any scope, policy or approval logic (M1, M2), and any tool, sandbox or egress code. The M0 acceptance below describes the foundation commit and stays true of it.
 
 ## Source-of-truth hierarchy (D-63)
 
@@ -39,7 +50,7 @@ M1 and M2 need only these gates. Everything that touches the network, a sandbox,
 - No network-touching tool adapter before the egress path passes its regression gate. No tool execution without the sandbox self-test passing (D-31, D-41, D-42).
 - Secrets: Secret Service only, fail closed. Never in argv, environment, standard input, logs or ordinary files (D-52, D-85). The bootstrap secret lives only on a memory-backed file (D-68).
 - No commit, push or merge unless the owner asks for it in that request. The commit steps below are written for when the owner has asked.
-- Every decision here is a requirement or a direction. Nothing in this plan is implemented, and no security control counts as verified until a test demonstrates it (`security.md` 18).
+- Every decision here is a requirement or a direction. Apart from the Phase 1 scaffold below, nothing in this plan is implemented, and no security control counts as verified until a test demonstrates it (`security.md` 18).
 - Tests that need `internal/` access live inside the Go module (D-27). Security regression tests are required for every security-critical task (`security.md` 16).
 
 ## Review Focus
@@ -56,15 +67,15 @@ These inputs are implied by the spec and are exercised by named tests in the tas
 
 | Path | Responsibility |
 | --- | --- |
-| `services/core/go.mod` | Module `github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core`, `go 1.26.0` floor, no `toolchain` line, no dependencies at first |
+| `services/core/go.mod` | Module `github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core`, `go 1.26.0` floor, no `toolchain` line. The Phase 1 scaffold added Gin v1.12.0 and its indirect modules. The domain packages of M1 add none |
 | `services/core/internal/domain/scope/host.go` | `Host` canonical ASCII name value type and `ParseHost` |
 | `services/core/internal/domain/scope/addr.go` | `Addr`, `Prefix` parsing with `net/netip`, canonical forms, embedded-IPv4 rejection |
 | `services/core/internal/domain/scope/port.go` | `PortSet` parsing and default sets |
 | `services/core/internal/domain/scope/rule.go` | `Rule`, `RuleKind` (domain, wildcard, ip, cidr), registration validation |
 | `services/core/internal/domain/scope/evaluate.go` | `RuleSet.Evaluate(Target) Decision` (names and literals only, no resolution) |
 | `services/core/internal/domain/scope/*_test.go` | Table-driven and fuzz tests |
-| `services/core/tests/architecture/deps_test.go` | Dependency-direction test over `go list -json` |
-| `Makefile` | `make test` target only at first |
+| `services/core/tests/architecture/deps_test.go` | Dependency-direction test over `go list -json`. It exists since the Phase 1 scaffold. The domain order table is added with the first domain package |
+| `Makefile` | `make test`, build and run targets exist since the Phase 1 scaffold. PostgreSQL and worker targets arrive with M3 and M7 |
 
 ---
 
@@ -78,7 +89,7 @@ Milestone IDs are stable. M0 and M16 to M25 were added in Round 6 to close PM-01
 | M1 | Scope canonicalization core (pure domain) | M0 | FR-SCOPE-001, FR-SCOPE-002 | none |
 | M1b | Host conversion (IDNA) in the application layer | M1 | FR-SCOPE-007 | O-33 corpus |
 | M2 | Policy and approval domain model | M1 | FR-POLICY-001, FR-APPROVAL-001 to 004, FR-APPROVAL-006 (domain parts), FR-SCOPE-004 to 006 (domain parts) | none |
-| M3 | Persistence: PostgreSQL provisioning, schema, migrations, atomic consume | M2 | schema for FR-PROG, FR-ASSESS, FR-JOB, FR-APPROVAL | G-consume. Idle memory measured |
+| M3 | Persistence: PostgreSQL provisioning, schema, migrations, atomic consume, database readiness probe | M2 | schema for FR-PROG, FR-ASSESS, FR-JOB, FR-APPROVAL, NFR-OBS-003 (probe) | G-consume. Idle memory measured |
 | M4 | Authentication and local session | M3 | FR-AUTH-001, FR-AUTH-002 (server side), FR-APPROVAL-005 (re-authentication backend) | G-auth. Argon2id benchmark |
 | M5 | Audit event model and sink | M3 | FR-AUDIT-001, FR-AI-004 (audit part) | none |
 | M6 | Evidence metadata and integrity | M3, M5 | FR-EVIDENCE-001, FR-EVIDENCE-002 | none |
@@ -207,10 +218,10 @@ Deliverable: a stdlib-only `scope` domain package that parses rules and targets 
 
 ## Milestone definitions (M1b to M25)
 
-Each of these is expanded into TDD tasks like M1 when its dependencies pass their gates. The definition fixes the deliverable, the interfaces others rely on, the acceptance tests and the stop conditions. Nothing below is implemented.
+Each of these is expanded into TDD tasks like M1 when its dependencies pass their gates. The definition fixes the deliverable, the interfaces others rely on, the acceptance tests and the stop conditions. Nothing below is implemented. The Phase 1 scaffold section lists the only code that exists.
 
 ### M0: Foundation and repository
-Deliverable: `LICENSE` (Apache-2.0), `.gitignore`, `README.md`, steering and decision documents, the threat model, the PRD, this plan, and `scripts/validate-foundation.py`. Acceptance: the validator exits 0, no application source exists, and the foundation commit contains no secret, evidence or local artifact. Evidence is the validator output in the foundation record.
+Deliverable: `LICENSE` (Apache-2.0), `.gitignore`, `README.md`, steering and decision documents, the threat model, the PRD, this plan, and `scripts/validate-foundation.py`. Acceptance: the validator exits 0, no application source exists in the foundation commit (the later Phase 1 scaffold does not change this), and the foundation commit contains no secret, evidence or local artifact. Evidence is the validator output in the foundation record.
 
 ### M1b: Host conversion (application layer)
 Depends on: M1. Deliverable: `application/scope.CanonicalizeHost(input string) (scope.Host, error)` using `golang.org/x/net/idna` (P-57) with a strict, explicitly built, non-transitional Lookup profile, hand-written WHATWG numeric-host rules, and a single-script-per-label rule built from the standard `unicode` script tables (D-73). A mixed-script label is refused by default with an audited override. Acceptance: every S1.1 IDNA input (`fuß.de` becomes `xn--fu-hia.de`, ideographic full stop, soft hyphen, uppercase `XN--`, invalid `xn--`, length limits), the IdnaTestV2 corpus, a homograph corpus, and a cross-check that the domain `ParseHost` accepts the output. Stop if the library result differs from the S1.1 expectation. Gate O-33.
@@ -219,7 +230,7 @@ Depends on: M1. Deliverable: `application/scope.CanonicalizeHost(input string) (
 Depends on: M1. Deliverable: pure `operation` (canonical form and hash), `actor` (human, system, ai, P-02), `approval` (record with expiry, uses, duration, concurrency, rate, attempt maximum, hash and destinations), the consumption state machine (claim, launch check, denial, retry claim), and the pure decision function returning `AuthorizedOperation` (P-03, P-04). Acceptance: expiry stops new launches only, revocation, an intrusive operation has one launch, a pre-launch denial is not an attempt, a consumed use is not restored, a retry claim reuses the record, a zero-value `AuthorizedOperation` is rejected, an AI actor cannot approve. No database.
 
 ### M3: Persistence
-Depends on: M2. Deliverable: PostgreSQL 18 per-user cluster scripts (D-67), goose migrations (forward only, the slices of `docs/design/database/migration-plan.md`), sqlc queries, login roles for migration, api, worker and retention, an append-only audit table with INSERT and SELECT only for the runtime roles, the policy store tables (D-64 choice 4), the atomic conditional consume statement with a unique `(approval, job)` constraint, and the recovery generation: the `recovery_state` table, the external marker file and startup reconciliation (DB-28, gate G-recovery). Acceptance: G-consume with real concurrent transactions, G-recovery, grant tests, a socket mode test, and a measurement of idle memory on the 8 GB laptop. Not covered: separation of two processes of one OS user (D-78).
+Depends on: M2. Deliverable: PostgreSQL 18 per-user cluster scripts (D-67), goose migrations (forward only, the slices of `docs/design/database/migration-plan.md`), sqlc queries, login roles for migration, api, worker and retention, an append-only audit table with INSERT and SELECT only for the runtime roles, the policy store tables (D-64 choice 4), the atomic conditional consume statement with a unique `(approval, job)` constraint, and the recovery generation: the `recovery_state` table, the external marker file and startup reconciliation (DB-28, gate G-recovery), and the database probe behind the existing `ReadinessProbe` port (D-86). Acceptance: a test that a database failure gives 503 `not_ready` on `GET /api/v1/health/ready` while `GET /api/v1/health/live` stays 200 (NFR-OBS-003), G-consume with real concurrent transactions, G-recovery, grant tests, a socket mode test, and a measurement of idle memory on the 8 GB laptop. Not covered: separation of two processes of one OS user (D-78).
 
 ### M4: Authentication and session
 Depends on: M3. Deliverable: one local account, Argon2id (benchmarked), server-side sessions with hashed tokens, HttpOnly cookie, CSRF token, Host and Origin checks, login rate limiting, the bootstrap secret on a memory-backed file, the one-time recovery code, password re-entry for intrusive approval and widening policy changes (default every time). No API tokens. Acceptance: G-auth, a test that bootstrap is refused without a memory-backed location, a recovery reuse test, and browser-level tests for DNS rebinding and cookie sharing across localhost ports (unverified today, T-55, T-57).
@@ -249,7 +260,7 @@ Depends on: M6, M10, M18, M19, M20. Deliverable: Subfinder (passive, `-duc`, no 
 Depends on: M3, M5, M25. Deliverable: provider port, a fake provider for tests, a loopback adapter, a generic OpenAI-compatible remote adapter, locality classification by connected address, a start-up check that cloud forwarding of a loopback model is off (otherwise remote), audited transmissions, typed proposals only. Acceptance: credentials never in prompts, a tunnel and a forwarding proxy are classified remote, re-resolution cannot change the classification, no provider is enabled by default.
 
 ### M13: Frontend foundation
-Depends on: M4. Deliverable: `apps/web` with the generated client (P-43), nonce CSP in `proxy.ts`, framing denial, same-origin rewrites, login and bootstrap screens, no inline scripts, no `dangerouslySetInnerHTML`. Acceptance: Vitest, header tests, a frame-denial test, and a test of the Host and Origin that Go sees through the rewrite (D-79). Node 24 and npm (D-66).
+Depends on: M4. Deliverable: `apps/web` with the generated client (P-43), nonce CSP in `proxy.ts`, framing denial, same-origin rewrites, login and bootstrap screens, no inline scripts, no `dangerouslySetInnerHTML`. Acceptance: Vitest, header tests, a frame-denial test, and a test of the Host and Origin that Go sees through the rewrite (D-79). Node 24 and npm (D-66). The Phase 1 shell already exists and M13 replaces its hand-written health client with the generated one.
 
 ### M14: Reporting
 Depends on: M6, M22. Deliverable: Markdown report from `text/template`, untrusted values only in code spans or fences, report status separate from validation status, a confirmed section that contains only Verified findings, export audited and redacted by default. Acceptance: an unverified candidate never appears in the confirmed section, an escape fuzz test, and an export audit test.
@@ -292,7 +303,7 @@ Depends on: M5. Deliverable: the `CredentialStore` port and a Secret Service ada
 
 ## Self-review
 
-- **Decision coverage:** D-47 to D-61 map to milestones as before. D-62 to D-85: D-63 to D-65 M0, M1. D-66 M13. D-67 M3. D-68 and D-69 M4 and M19. D-70 M8. D-71 M7, M10, M11. D-72 M9. D-73 M1, M1b. D-74 M0. D-75 M14 and M22. D-76 M11, M20, M22b. D-77 M6. D-78 accepted risks. D-79 M13. D-80 M3, M7. D-81 M12. D-82 M23. D-83 this plan. D-84 M0. D-85 M25.
+- **Decision coverage:** D-47 to D-61 map to milestones as before. D-62 to D-85: D-63 to D-65 M0, M1. D-66 M13. D-67 M3. D-68 and D-69 M4 and M19. D-70 M8. D-71 M7, M10, M11. D-72 M9. D-73 M1, M1b. D-74 M0. D-75 M14 and M22. D-76 M11, M20, M22b. D-77 M6. D-78 accepted risks. D-79 M13. D-80 M3, M7. D-86 (record 0004, health endpoints) Phase 1 scaffold and M3. D-81 M12. D-82 M23. D-83 this plan. D-84 M0. D-85 M25.
 - **Requirement coverage:** every FR of the PRD appears in the milestone map above. The validator checks this.
 - **Proportion:** only M1 is expanded to test level. The rest are definitions on purpose, because their interfaces depend on earlier milestones.
 - **Open items carried:** O-07, O-13, O-22, O-32, O-33, O-35, O-36 and O-38 each appear as a gate or note above. None blocks M1.

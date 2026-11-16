@@ -52,7 +52,7 @@ o_rows = [(m.group(1), l) for l in rows for m in [re.match(r'\| (O-\d+) \|', l)]
 o_ids = [o for o, _ in o_rows]
 check('D ids unique', len(d_ids) == len(set(d_ids)), str([x for x in d_ids if d_ids.count(x) > 1]))
 check('D ids contiguous 1..%d' % len(d_ids), sorted(int(x[2:]) for x in d_ids) == list(range(1, len(d_ids) + 1)))
-check('D-85 is the last decision', max(int(x[2:]) for x in d_ids) == 85)
+check('D-86 is the last decision', max(int(x[2:]) for x in d_ids) == 86)
 check('P ids unique', len(p_ids) == len(set(p_ids)), str([x for x in p_ids if p_ids.count(x) > 1]))
 check('P ids cover 1..64', set(int(x[2:]) for x in p_ids) == set(range(1, 65)))
 check('O ids unique', len(o_ids) == len(set(o_ids)), str([x for x in o_ids if o_ids.count(x) > 1]))
@@ -70,8 +70,15 @@ check('every other O item is in the Resolved table', all(('| %s |' % ('O-%02d' %
 DOCS = ['.kiro/steering/security.md', '.kiro/steering/product.md', '.kiro/steering/structure.md', '.kiro/steering/tech.md',
         '.kiro/steering/architecture.md', '.kiro/specs/mvp/plan.md', 'docs/PRD.md', 'docs/security/threat-model.md',
         'docs/decisions/README.md', 'docs/decisions/0001-owner-security-decisions-round-2.md',
-        'docs/decisions/0002-foundation-completion-decisions.md', 'docs/decisions/0003-foundation-closure-decisions.md', 'README.md']
-D_SET, P_SET, O_SET = set(d_ids), set(p_ids), set(o_ids)
+        'docs/decisions/0002-foundation-completion-decisions.md', 'docs/decisions/0003-foundation-closure-decisions.md', 'docs/decisions/0004-health-endpoints-mvp-decision.md', 'README.md']
+# Decision records after 0003 (D-86 onward) define their own identifiers. The register in architecture.md must list them too.
+later_d = []
+for f in sorted(os.listdir('docs/decisions')):
+    if re.match(r'000[4-9]-.*\.md$', f) or re.match(r'00[1-9]\d-.*\.md$', f):
+        later_d += re.findall(r'(?m)^\| (D-\d+) \|', read('docs/decisions/' + f))
+check('decision records after 0003 continue the register without gaps', sorted(int(x[2:]) for x in later_d) == list(range(86, 86 + len(later_d))), str(later_d))
+D_SET, P_SET, O_SET = set(d_ids) | set(later_d), set(p_ids), set(o_ids)
+check('decisions defined in records after 0003 are in the architecture register', set(later_d) <= set(d_ids), str(sorted(set(later_d) - set(d_ids))))
 for doc in DOCS:
     txt = read(doc)
     bad = set()
@@ -104,7 +111,7 @@ check('threat ids unique and contiguous', ids == ['T-%02d' % n for n in range(1,
 check('every threat has all 12 fields non-empty', all(all(x for x in c) for _, c in reg))
 STATUS = {'Mitigated and tested', 'Feasibility shown', 'Specified', 'Partially specified', 'Unresolved', 'Accepted risk'}
 check('threat statuses are from the vocabulary', all(c[7] in STATUS for _, c in reg))
-check('no threat is "Mitigated and tested" (no code exists)', not any(c[7] == 'Mitigated and tested' for _, c in reg))
+check('no threat is "Mitigated and tested" (no control is implemented and tested end to end)', not any(c[7] == 'Mitigated and tested' for _, c in reg))
 check('priorities are High, Medium or Low', all(c[10] in ('High', 'Medium', 'Low') for _, c in reg))
 imp = re.findall(r'(?m)^\| (T-\d+) \| (.+) \| (High|Medium|Low) \|$', TM.split('### 7.4 Impact by threat')[1].split('## 8. Abuse cases')[0])
 check('impact table covers all 73 threats', [i for i, _, _ in imp] == ids)
@@ -129,7 +136,7 @@ for fid, b in frs.items():
     check('%s has all eight fields' % fid, all(('- **%s:**' % f) in b for f in FIELDS))
 check('PRD FR ids unique', len(re.findall(r'(?m)^#### FR-', PRD)) == len(frs))
 nfr = re.findall(r'(?m)^\| (NFR-[A-Z]+-\d+) \|', PRD)
-check('PRD has 24 NFRs, unique', len(nfr) == 24 and len(set(nfr)) == 24, str(len(nfr)))
+check('PRD has 25 NFRs, unique', len(nfr) == 25 and len(set(nfr)) == 25, str(len(nfr)))
 check('no requirement is marked open', 'OPEN — OWNER DECISION REQUIRED' not in ''.join(frs.values()) and not re.search(r'\| `OPEN — OWNER', PRD))
 check('no FR status claims implementation', not any(re.search(r'- \*\*MVP status:\*\* (Implemented|Done|Complete)', b) for b in frs.values()))
 check('no FR is "Not in plan"', not any(re.search(r'- \*\*MVP status:\*\* Not in plan', b) for b in frs.values()))
@@ -200,7 +207,7 @@ check('PRD roadmap lists the same milestones as the plan', prd_ms == set(mrows),
 check('M1 does not depend on tool execution', mrows['M1'][0] == ['M0'])
 
 # ---------------------------------------------------------------- 5. text hygiene
-NEW_DOCS = ['docs/PRD.md', 'docs/decisions/0003-foundation-closure-decisions.md', 'docs/decisions/README.md', 'README.md']
+NEW_DOCS = ['docs/PRD.md', 'docs/decisions/0003-foundation-closure-decisions.md', 'docs/decisions/0004-health-endpoints-mvp-decision.md', 'docs/decisions/README.md', 'README.md']
 for d in NEW_DOCS:
     txt = read(d).replace('`OPEN — OWNER DECISION REQUIRED`', '')
     check('no em dash in ' + d, '—' not in txt)

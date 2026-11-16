@@ -199,7 +199,7 @@ The owner accepts these for the MVP. Each stays in the threat model with its sta
 
 - OpenAPI is spec first: author 3.0.4, generate the Gin server with oapi-codegen v2.8.2, generate the TypeScript client with openapi-typescript and openapi-fetch (P-43). Generated code is committed and reviewed.
 - Queue: a custom PostgreSQL queue with `FOR UPDATE SKIP LOCKED`, leases and fencing (P-44, P-36). `LISTEN/NOTIFY` is only a wake-up hint. Passive jobs: at most three attempts in total, no automatic retry after cancellation, revocation or a policy denial, and a retry never reuses an approval use (D-55). Request rates of passive sources fall under D-71.
-- Logging: `log/slog` with a redacting handler (P-45). No telemetry. A health endpoint and metrics are post-MVP.
+- Logging: `log/slog` with a redacting handler (P-45). No telemetry. A health endpoint and metrics are post-MVP. (Superseded for health endpoints by D-86 in `0004-health-endpoints-mvp-decision.md`. Metrics stay post-MVP.)
 - Tests: `go test`, an architecture test over `go list -json`, a temporary local PostgreSQL cluster for integration tests, Vitest and Testing Library for the frontend, Playwright later with Chromium only (P-46).
 - Identifiers are UUID v7 generated in the application (P-47). Migrations are forward only. A migration is never edited after release. A correction is a new migration.
 - Start-up is a Makefile with targets for the PostgreSQL cluster, the server and the worker. No launcher binary (P-61, D-18).

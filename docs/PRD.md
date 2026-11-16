@@ -7,14 +7,14 @@
 | Product | MORN1NGST4R (canonical technical name `morningstar`) |
 | Document | Product Requirements Document |
 | Version | 0.2 |
-| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). Nothing is implemented. |
+| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. Nothing is implemented except the Phase 1 scaffold. |
 | Last updated | 2026-11-16 |
-| Implementation state | No application code exists. No requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
+| Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
 | Owner | The project owner (single decision authority) |
 
 **Source documents.** Listed in precedence order (the order this document follows when sources differ).
 
-1. Owner decisions: `docs/decisions/0001-owner-security-decisions-round-2.md`, `docs/decisions/0002-foundation-completion-decisions.md`, `docs/decisions/0003-foundation-closure-decisions.md`, and the decision register in `.kiro/steering/architecture.md` section 19 (D-01 to D-85).
+1. Owner decisions: `docs/decisions/0001-owner-security-decisions-round-2.md`, `docs/decisions/0002-foundation-completion-decisions.md`, `docs/decisions/0003-foundation-closure-decisions.md`, `docs/decisions/0004-health-endpoints-mvp-decision.md` (D-86), and the decision register in `.kiro/steering/architecture.md` section 19 (D-01 to D-85).
 2. Product steering: `.kiro/steering/product.md`.
 3. Steering: `.kiro/steering/architecture.md`, `security.md`, `structure.md`.
 4. Technology: `.kiro/steering/tech.md` and `docs/development/tech-verification/`.
@@ -50,7 +50,7 @@
 | Open | An O- entry exists and no choice was made. The text is marked `OPEN — OWNER DECISION REQUIRED`. After Round 6 no requirement carries this marker. Eight decisions stay open as gates, listed in 3.17. |
 | Blocked | Cannot proceed until the named open decision or validation is settled |
 
-**MVP status values.** Planned (Mx) means a milestone of the plan covers it. Not in plan (PM-nn) means the plan names no milestone for it. After Round 6 every requirement has a milestone or is Out of MVP. Out of MVP means excluded. Every status is "not implemented".
+**MVP status values.** Planned (Mx) means a milestone of the plan covers it. Not in plan (PM-nn) means the plan names no milestone for it. After Round 6 every requirement has a milestone or is Out of MVP. Out of MVP means excluded. Every status is "not implemented", except NFR-OBS-003, which is partly implemented by the Phase 1 scaffold.
 
 ## 3.2 Executive Summary
 
@@ -723,12 +723,24 @@ Targets appear only where a decision or evidence supports them.
 | NFR-USE-002 | Usability | The approval and registration screens show a target in both its ASCII and Unicode forms. | Binary | S1.1 | M24 |
 | NFR-RES-001 | Resource efficiency | The application runs on a Linux laptop with 8 GB RAM. Idle PostgreSQL memory, the Next.js server and test-browser sizes are not measured. M3 and M13 record them. No number is invented. | Stated target, measured gate | tech.md 15 (owner statement), D-67 | M3, M13 |
 | NFR-OBS-001 | Observability | Structured, redacted logs with request and job identifiers. Library is `log/slog` (D-80). | Binary | arch section 17, `SEC 13` | M5 |
-| NFR-OBS-002 | Observability | Metrics and health endpoints are post-MVP. Read-only polling is not audited per request. Evidence access and exports are audited. | Binary | D-80, `SEC 13` | M5 |
+| NFR-OBS-002 | Observability | Metrics endpoints are post-MVP. Read-only polling is not audited per request. Evidence access and exports are audited. Health endpoints are in NFR-OBS-003. | Binary | D-80, `SEC 13` | M5 |
+| NFR-OBS-003 | Observability | `GET /api/v1/health/live` and `GET /api/v1/health/ready` are part of the MVP. They return fixed, minimal status words, expose no sensitive information, and stay behind the Host allow-list on the loopback-only listener. Readiness confirms process initialization only until readiness probes exist. | Binary | D-86, `SEC 8` | Phase 1 scaffold, M3 |
 | NFR-INT-001 | Data integrity | Evidence integrity uses SHA-256 with re-hash on read. | Binary | D-10 | M6 |
 | NFR-INT-002 | Data integrity | Approval consumption and job claim are atomic in one transaction, with a unique (approval, job) constraint. | Binary | D-30, D-55 | M3 |
 | NFR-INT-003 | Data integrity | Asset observation history is append-only. | Binary | D-76 | M20 |
 | NFR-PORT-001 | Portability | The MVP targets Linux x86_64 on localhost. The reference host is the only platform tested. Other distributions are NOT TESTED. The supported baseline is defined by capability (P-51, O-22). | Reference host only | D-17, D-19, D-20, tech.md 1 | M8 |
 | NFR-PORT-002 | Portability | Business logic is platform-independent. OS-specific code lives under `platform/`. | Binary | structure.md 5.5, P-21 (adopted, D-80) | M1 |
+
+**NFR-OBS-003 acceptance criteria.** The contract is in `docs/decisions/0004-health-endpoints-mvp-decision.md`. Metrics endpoints are not part of it.
+
+1. Liveness returns 200 with `{"status":"ok"}` on an allowed Host and does not depend on the database, the worker or any other dependency.
+2. Readiness returns 200 with `{"status":"ready"}` when initialization is complete and every registered probe passes, and 503 with `{"status":"not_ready"}` and `Retry-After` otherwise.
+3. Phase 1 readiness has no probe, so it does not claim database readiness. M3 adds the database probe, with a test that a database failure gives 503 `not_ready` while liveness stays 200.
+4. A Host header outside the allow-list gets 403 `host_denied` on every path. The server refuses to bind a non-loopback address.
+5. Another method on a health path gets 405 `method_not_allowed` with an `Allow` header, and an unknown path gets 404 `not_found`, both in the standard error envelope.
+6. No response contains a stack trace, secret, environment value, internal path, version string or dependency detail. A failing probe is logged by its fixed name only.
+7. The health routes are the only routes reachable without a session. Authentication for every other route is FR-AUTH-002 (M4).
+8. Evidence: the automated tests of the Phase 1 scaffold (`services/core` router, bootstrap and architecture tests) for criteria 1, 2 and 4 to 6. Criterion 3 is verified by the M3 test.
 
 ## 3.10 Security and Privacy Requirements
 
@@ -867,7 +879,7 @@ The plan gaps PM-01 to PM-06 are closed by milestones M16 to M25 (D-83). SM-09 c
 
 ## 3.16 Release Roadmap
 
-The roadmap is `.kiro/specs/mvp/plan.md`. This section only maps requirements to its milestones. Dependencies, gates and readiness conditions are those of the plan. M1 is the only milestone expanded to task level (Tasks 1.1 to 1.5).
+The roadmap is `.kiro/specs/mvp/plan.md`. This section only maps requirements to its milestones. Dependencies, gates and readiness conditions are those of the plan. M1 is the only milestone expanded to task level (Tasks 1.1 to 1.5). The Phase 1 scaffold is existing preparatory work and is not a milestone. M1 has not started.
 
 | Milestone | Plan deliverable | Requirements |
 | --- | --- | --- |
@@ -875,7 +887,7 @@ The roadmap is `.kiro/specs/mvp/plan.md`. This section only maps requirements to
 | M1 | Scope canonicalization core (pure domain) | FR-SCOPE-001, FR-SCOPE-002, NFR-MAINT-001, NFR-MAINT-002, NFR-PORT-002 |
 | M1b | Host conversion (IDNA) | FR-SCOPE-007 |
 | M2 | Policy and approval domain | FR-POLICY-001, FR-APPROVAL-001 to FR-APPROVAL-004, FR-APPROVAL-006 (domain parts), FR-SCOPE-004 to FR-SCOPE-006 (domain parts) |
-| M3 | Persistence | NFR-INT-002, schema for FR-PROG-001, FR-ASSESS-001, FR-AUDIT-001 |
+| M3 | Persistence | NFR-INT-002, NFR-OBS-003 (database readiness probe), schema for FR-PROG-001, FR-ASSESS-001, FR-AUDIT-001 |
 | M4 | Authentication and session | FR-AUTH-001, FR-AUTH-002 (server side), FR-APPROVAL-005 (backend) |
 | M5 | Audit model | FR-AUDIT-001, NFR-OBS-001, NFR-OBS-002, NFR-REL-002 |
 | M6 | Evidence metadata and integrity | FR-EVIDENCE-001, FR-EVIDENCE-002, NFR-INT-001, NFR-PRIV-002 |
@@ -930,7 +942,7 @@ The roadmap is `.kiro/specs/mvp/plan.md`. This section only maps requirements to
 
 ### Owner and product decisions
 
-Decisions are closed in `docs/decisions/0003-foundation-closure-decisions.md` (D-63 to D-85). The register is in `architecture.md` section 19. Eight items stay open as gates, and none blocks M1.
+Decisions are closed in `docs/decisions/0003-foundation-closure-decisions.md` (D-63 to D-85) and `docs/decisions/0004-health-endpoints-mvp-decision.md` (D-86). The register is in `architecture.md` section 19. Eight items stay open as gates, and none blocks M1.
 
 | Item | Gate | Blocks |
 | --- | --- | --- |

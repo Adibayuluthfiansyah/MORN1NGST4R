@@ -1,6 +1,6 @@
 # Documentation
 
-MORN1NGST4R is in the design phase. No application code exists. The documents below describe what the product must do, why the main decisions were made, and the design that the implementation will follow.
+MORN1NGST4R is in the design phase. The application code is limited to the Phase 1 scaffold: a Go server skeleton with two health endpoints and a Next.js shell. The documents below describe what the product must do, why the main decisions were made, and the design that the implementation will follow.
 
 ## Where to start
 
@@ -16,6 +16,7 @@ MORN1NGST4R is in the design phase. No application code exists. The documents be
 | Evidence that the sandbox and egress ideas work on one host | `security/feasibility/` |
 | Version and behavior checks of the chosen technologies | `development/tech-verification/` |
 | Which documents are public and why | `development/documentation-inventory.md` |
+| How to run and test the current code | `development/getting-started.md` |
 
 The steering files (`../.kiro/steering/`) are the authoritative product, security, architecture, structure and technology statements. The implementation plan is `../.kiro/specs/mvp/plan.md`.
 
@@ -34,6 +35,7 @@ docs/
 ├── development/
 │   ├── tech-verification/
 │   ├── agent-skills.md
+│   ├── getting-started.md
 │   └── documentation-inventory.md
 └── security/
     ├── threat-model.md
