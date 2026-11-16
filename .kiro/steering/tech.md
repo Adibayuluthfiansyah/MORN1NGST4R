@@ -112,7 +112,7 @@ OpenAPI documents the API (D-02, Decided). **Proposed (P-43, O-04):** spec-first
 
 ## 11. Logging and observability
 
-Structured logging with the standard library `log/slog` (Go 1.21 or later) and a redacting handler (Proposed, P-45, O-14). Audit goes through the `AuditSink` port (D-12, D-23). Secrets never reach logs (`security.md` 6, 13). No telemetry. Metrics and health endpoints: Open.
+Structured logging with the standard library `log/slog` (Go 1.21 or later) and a redacting handler (Proposed, P-45, O-14). Audit goes through the `AuditSink` port (D-12, D-23). Secrets never reach logs (`security.md` 6, 13). No telemetry. Health and readiness endpoints are part of the MVP (D-86, `docs/decisions/0004-health-endpoints-mvp-decision.md`): fixed status words, behind the Host allow-list, no dependency detail, and readiness confirms process initialization only until a probe is registered. Metrics endpoints are post-MVP (D-80).
 
 ## 12. Testing strategy
 
@@ -120,7 +120,7 @@ Proposed (P-46, O-18): `go test` with the standard library, optional testify; ar
 
 ## 13. Build and development commands
 
-None of the application commands exist yet. These are the intended ones (Proposed) and the ones that already exist.
+Rows marked yes exist. Rows marked no are intended (Proposed).
 
 | Command | Exists | Purpose |
 | --- | --- | --- |
@@ -128,9 +128,10 @@ None of the application commands exist yet. These are the intended ones (Propose
 | `bash scripts/spikes/egress/run-all.sh` | yes | Throwaway reference suite for the egress spike, about 40 s. The product needs its own regression tests ported from it. |
 | `scripts/sync-agent-skills.sh verify` | yes | Verify installed agent skills |
 | `python3 scripts/validate-foundation.py` | yes | Foundation checks: decision register, references, milestone dependencies, ignore rules, repository safety scan. Exit status 1 on any failure. |
-| `go test ./...` in `services/core` | no | Go tests |
-| `next build` then `next start -H 127.0.0.1 -p <port>` in `apps/web` | no | Serve the UI |
-| A Makefile with targets for the PostgreSQL cluster, server and worker | no | Process start-up, no launcher (Proposed, P-61, O-21) |
+| `make test` | yes | `go vet` and `go test -race ./...` in `services/core` (includes the architecture test), then `next typegen`, `tsc --noEmit` and Vitest in `apps/web` |
+| `make run-server`, `make run-web` | yes | Go API on 127.0.0.1:8080 and web dev server on 127.0.0.1:3000 (Phase 1 scaffold) |
+| `next build` then `next start -H 127.0.0.1 -p <port>` in `apps/web` | yes | Serve the UI. The API origin of the rewrite is fixed at build time |
+| Makefile targets for the PostgreSQL cluster and the worker | no | Process start-up, no launcher (Proposed, P-61, O-21). Arrive with M3 and M7 |
 
 ## 14. Dependency and licence policy
 
@@ -146,4 +147,4 @@ Target: a Linux laptop with 8 GB RAM. The host reported 7.7 GB total. Argon2id a
 
 ## 16. Explicitly deferred technology choices
 
-Decided in Round 6 and no longer deferred: Node and package manager (D-66), PostgreSQL provisioning (D-67), password recovery (D-68), evidence encryption and retention defaults (D-77), skill manifest direction (D-82), report format (D-75). Still deferred or gated: browser support policy, metrics and health, a second authentication factor, the public suffix source (O-32) and the MPL licence question (D-74), a trusted-LAN AI category (O-36), Windows, macOS and headless platform choices, native desktop frameworks (D-18), numeric active-operation limits (O-38, D-71), heartbeat and kill timing (O-35, D-71), report formats beyond Markdown, encryption at rest after the MVP.
+Decided in Round 6 and no longer deferred: Node and package manager (D-66), PostgreSQL provisioning (D-67), password recovery (D-68), evidence encryption and retention defaults (D-77), skill manifest direction (D-82), report format (D-75). Still deferred or gated: browser support policy, metrics endpoints, a second authentication factor, the public suffix source (O-32) and the MPL licence question (D-74), a trusted-LAN AI category (O-36), Windows, macOS and headless platform choices, native desktop frameworks (D-18), numeric active-operation limits (O-38, D-71), heartbeat and kill timing (O-35, D-71), report formats beyond Markdown, encryption at rest after the MVP.

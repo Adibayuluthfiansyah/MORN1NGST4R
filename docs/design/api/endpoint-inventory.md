@@ -225,7 +225,7 @@ Route classes: **PUB** public before a session (still protected by Host, Origin 
 | DEF-02 | - | - | Manual asset entry (`human_entered` origin exists in the schema). Not a PRD requirement, see DQ-14. |
 | DEF-03 | - | - | Program restore from archive and permanent deletion. Not in the MVP (DB retention, DQ-08). |
 | DEF-04 | - | - | Scope version diff view. Derivable client-side from two versions. |
-| DEF-05 | - | - | Health and metrics endpoints. Post-MVP (D-80). |
+| DEF-05 | - | - | Metrics endpoints. Post-MVP (D-80). The health endpoints are in the MVP (D-86, `docs/decisions/0004-health-endpoints-mvp-decision.md`) and are specified there until the OpenAPI document is validated. |
 | DEF-06 | - | - | API tokens and any non-session authentication. Not allowed in the MVP (D-60). |
 | DEF-07 | - | - | Evidence upload by the researcher. Not in the PRD. |
 | DEF-08 | - | - | Server-sent events or WebSockets for job progress. Polling is the MVP choice (P-12). |

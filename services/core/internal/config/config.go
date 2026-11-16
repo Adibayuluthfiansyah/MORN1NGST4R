@@ -1,0 +1,214 @@
+// Package config loads and validates the runtime configuration from the
+// process environment.
+//
+// Rules (security.md section 8, API conventions):
+//   - The listen address is an explicit loopback IP literal. A wildcard,
+//     LAN or hostname address is refused. Remote access needs a separate
+//     security review and is not configurable in the MVP.
+//   - The Host allow-list contains only loopback names and addresses.
+//   - A variable with the MORNINGSTAR_ prefix that this package does not know
+//     is an error, so a misspelled setting is never silently ignored. The one
+//     exception is MORNINGSTAR_API_ORIGIN, which belongs to apps/web and is
+//     accepted and ignored here.
+//   - No secret is read from here. Secrets are delivered through the
+//     credential store (security.md section 7), never through this package.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/netip"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const (
+	envPrefix       = "MORNINGSTAR_"
+	envHTTPListen   = "MORNINGSTAR_HTTP_LISTEN"
+	envAllowedHosts = "MORNINGSTAR_HTTP_ALLOWED_HOSTS"
+	envLogLevel     = "MORNINGSTAR_LOG_LEVEL"
+	envLogFormat    = "MORNINGSTAR_LOG_FORMAT"
+
+	// envWebAPIOrigin is a web-only setting. See Load.
+	envWebAPIOrigin = "MORNINGSTAR_API_ORIGIN"
+
+	defaultListen = "127.0.0.1:8080"
+)
+
+// Config is the validated configuration of the server process.
+type Config struct {
+	HTTP HTTP
+	Log  Log
+}
+
+// HTTP configures the HTTP server.
+type HTTP struct {
+	// Listen is the explicit loopback address the server binds.
+	Listen netip.AddrPort
+	// AllowedHosts is the exact, lower-case "host:port" allow-list that the
+	// Host header is checked against.
+	AllowedHosts []string
+
+	// Timeouts follow docs/design/api/conventions.md (read-header, read,
+	// write, idle). They are not configurable in this phase.
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	ShutdownTimeout   time.Duration
+}
+
+// Log configures structured logging.
+type Log struct {
+	Level  slog.Level
+	Format string // "json" or "text"
+}
+
+// Load builds a Config from environ, a list of "KEY=value" strings such as
+// os.Environ(). It reports every problem it finds, joined into one error.
+func Load(environ []string) (Config, error) {
+	values := make(map[string]string)
+	var errs []error
+	for _, kv := range environ {
+		key, value, ok := strings.Cut(kv, "=")
+		if !ok || !strings.HasPrefix(key, envPrefix) {
+			continue
+		}
+		switch key {
+		case envHTTPListen, envAllowedHosts, envLogLevel, envLogFormat:
+			values[key] = value
+		case envWebAPIOrigin:
+			// Owned and validated by apps/web (next.config.ts). Recognised
+			// only so one shared environment can serve both processes. It
+			// is never read as a Go setting.
+		default:
+			errs = append(errs, fmt.Errorf("unknown setting %s", key))
+		}
+	}
+
+	cfg := Config{
+		HTTP: HTTP{
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       60 * time.Second,
+			ShutdownTimeout:   10 * time.Second,
+		},
+		Log: Log{Level: slog.LevelInfo, Format: "json"},
+	}
+
+	listen, ok := values[envHTTPListen]
+	if !ok {
+		listen = defaultListen
+	}
+	addr, err := parseLoopbackListen(listen)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("%s: %w", envHTTPListen, err))
+	} else {
+		cfg.HTTP.Listen = addr
+	}
+
+	if raw, ok := values[envAllowedHosts]; ok {
+		hosts, err := parseAllowedHosts(raw)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", envAllowedHosts, err))
+		} else {
+			cfg.HTTP.AllowedHosts = hosts
+		}
+	} else if err == nil {
+		port := strconv.Itoa(int(addr.Port()))
+		cfg.HTTP.AllowedHosts = []string{hostPort(addr.Addr(), port), "localhost:" + port}
+	}
+
+	if raw, ok := values[envLogLevel]; ok {
+		level, err := parseLevel(raw)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", envLogLevel, err))
+		} else {
+			cfg.Log.Level = level
+		}
+	}
+	if raw, ok := values[envLogFormat]; ok {
+		if raw != "json" && raw != "text" {
+			errs = append(errs, fmt.Errorf("%s: %q is not one of json, text", envLogFormat, raw))
+		} else {
+			cfg.Log.Format = raw
+		}
+	}
+
+	if len(errs) > 0 {
+		return Config{}, fmt.Errorf("invalid configuration: %w", errors.Join(errs...))
+	}
+	return cfg, nil
+}
+
+func parseLoopbackListen(raw string) (netip.AddrPort, error) {
+	ap, err := netip.ParseAddrPort(raw)
+	if err != nil {
+		return netip.AddrPort{}, fmt.Errorf("%q is not an IP address with a port", raw)
+	}
+	if ap.Port() == 0 {
+		return netip.AddrPort{}, fmt.Errorf("%q: port 0 is not allowed", raw)
+	}
+	if ap.Addr().Zone() != "" {
+		return netip.AddrPort{}, fmt.Errorf("%q has an IPv6 zone. Zones are not allowed", raw)
+	}
+	if ap.Addr().Is4In6() || !ap.Addr().IsLoopback() {
+		return netip.AddrPort{}, fmt.Errorf("%q is not a loopback address. Remote access is not supported", raw)
+	}
+	return ap, nil
+}
+
+func parseAllowedHosts(raw string) ([]string, error) {
+	var hosts []string
+	seen := make(map[string]bool)
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.ToLower(strings.TrimSpace(entry))
+		if entry == "" {
+			return nil, errors.New("empty entry")
+		}
+		host, port, err := net.SplitHostPort(entry)
+		if err != nil {
+			return nil, fmt.Errorf("%q is not host:port", entry)
+		}
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 || strconv.Itoa(n) != port {
+			return nil, fmt.Errorf("%q has an invalid port", entry)
+		}
+		if host != "localhost" {
+			ip, err := netip.ParseAddr(host)
+			if err != nil || ip.Zone() != "" || ip.Is4In6() || !ip.IsLoopback() {
+				return nil, fmt.Errorf("%q is not localhost or a loopback address", entry)
+			}
+		}
+		canonical := entry
+		if ip, err := netip.ParseAddr(host); err == nil {
+			canonical = hostPort(ip, port)
+		}
+		if !seen[canonical] {
+			seen[canonical] = true
+			hosts = append(hosts, canonical)
+		}
+	}
+	return hosts, nil
+}
+
+func hostPort(ip netip.Addr, port string) string {
+	return net.JoinHostPort(ip.String(), port)
+}
+
+func parseLevel(raw string) (slog.Level, error) {
+	switch raw {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	}
+	return 0, fmt.Errorf("%q is not one of debug, info, warn, error", raw)
+}

@@ -439,7 +439,8 @@ check('design documents contain no secret-like text or local paths', not bad, ba
 em = [os.path.join(dp, f) for dp, _, fs in os.walk('docs/design') for f in fs if '—' in read(os.path.join(dp, f))]
 check('design documents contain no em dash', not em, em)
 cat = 'public-docs'
-check('no application source or migration file was added under services or apps', not any(os.path.exists(p) for p in ('services', 'apps')))
+gen = [os.path.join(dp, f) for root in ('services', 'apps') if os.path.isdir(root) for dp, dn, fs in os.walk(root) if 'node_modules' not in dp for f in fs if f.endswith('.gen.go') or 'openapi' in f.lower()]
+check('no migration, sqlc config or OpenAPI-generated code exists before G-openapi and M3', not any(os.path.exists(p) for p in ('services/core/migrations', 'services/core/queries', 'services/core/sqlc.yaml')) and not gen, gen)
 print()
 print('%-22s %6s %6s' % ('category', 'pass', 'fail'))
 for k, (p, f) in by_cat.items():

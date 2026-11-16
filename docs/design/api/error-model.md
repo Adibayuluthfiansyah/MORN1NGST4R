@@ -4,7 +4,7 @@ Status: design proposal.
 
 ## Shape
 
-Every error response is `application/json` with this body and the same `X-Request-Id` header. There is no other error format.
+Every error response is `application/json` with this body and the same `X-Request-Id` header. There is no other error format. The two health probes (`docs/decisions/0004-health-endpoints-mvp-decision.md`) answer with a plain status document such as `{"status":"not_ready"}` on both 200 and 503. That is a status document, not an error response. Every other failure of those routes uses this envelope.
 
 ```json
 {
@@ -38,6 +38,7 @@ Stack traces, SQL text or constraint names, filesystem paths, secrets or hashes,
 | 401 | Authentication | `bootstrap_secret_invalid`, `invalid_credentials`, `recovery_invalid`, `session_expired`, `unauthenticated` |
 | 403 | Authorization and browser protection | `csrf_invalid`, `forbidden`, `host_denied`, `origin_denied`, `policy_denied`, `reauth_invalid`, `reauth_required` |
 | 404 | Not found or not visible | `not_found`, `source_unknown`, `tool_unknown` |
+| 405 | Method not allowed | `method_not_allowed` |
 | 409 | State conflict | `account_exists`, `alert_cause_unresolved`, `approval_exhausted`, `approval_expired`, `approval_required`, `approval_revoked`, `asset_not_in_scope`, `attestation_text_outdated`, `conflict_state`, `disclosure_mismatch`, `duplicate_finding`, `evidence_integrity_failed`, `evidence_required`, `exclusion_unacknowledged`, `finding_not_verified`, `idempotency_conflict`, `jobs_still_running`, `numeric_limits_missing`, `operation_hash_mismatch`, `operation_not_approvable`, `program_archived`, `program_has_active_assessments`, `provider_not_enabled`, `recovery_not_required`, `report_not_generated`, `scope_decision_stale`, `setup_unavailable`, `target_in_use`, `target_set_hash_mismatch`, `tool_not_verified`, `validation_required`, `validation_stale`, `version_conflict` |
 | 410 | Gone | `evidence_purged` |
 | 413 | Too large | `payload_too_large` |
@@ -65,6 +66,7 @@ Stack traces, SQL text or constraint names, filesystem paths, secrets or hashes,
 | `reauth_invalid` | 403 | The re-authentication grant is expired, consumed or bound to another action. | AUTH-09, POL-02, SCP-02, SCP-07, LAB-01, ASM-06 and 7 more |
 | `policy_denied` | 403 | The policy engine denied the operation. Reasons are stable codes. | JOB-01, FND-13 |
 | `not_found` | 404 | The resource does not exist or is not visible to this session. | AUTH-06, POL-02, POL-03, PRG-03, PRG-04, PRG-05 and 97 more |
+| `method_not_allowed` | 405 | The method is not allowed for this path. The response carries an `Allow` header that lists the permitted methods. | Router level: a known path called with a method it does not serve. No inventory endpoint returns it by design. |
 | `conflict_state` | 409 | The resource is not in a state that allows this transition. | AUTH-02, AUTH-06, AUTH-08, AUTH-10, AUTH-09, POL-02 and 55 more |
 | `version_conflict` | 409 | If-Match or expected version did not match. | PRG-04, TGT-04, SCP-02, ASM-04, AI-05 |
 | `idempotency_conflict` | 409 | The Idempotency-Key was reused with a different request. | PRG-01, PRG-06, TGT-01, SCP-02, LAB-01, VAL-01 and 10 more |
@@ -139,6 +141,7 @@ Stack traces, SQL text or constraint names, filesystem paths, secrets or hashes,
 | Conflicting state transition | 409 `conflict_state`. The body names no internal state beyond the current public status. |
 | Rate limit | 429 `rate_limited` with `Retry-After`. |
 | Resource not found | 404 `not_found`. |
+| Method not allowed | 405 `method_not_allowed` with an `Allow` header, in the standard envelope. It is raised by the router before any handler, and a Host outside the allow-list is still denied first (403 `host_denied`). |
 | Evidence integrity failure | 409 `evidence_integrity_failed`. The check result is recorded, the evidence is marked, an alert is raised, and the content is withheld unless the human acknowledges (DQ-15). |
 | Database unavailable | 503 `database_unavailable`, `retryable: true`. No operation starts. There is no in-memory fallback (architecture section 17). |
 | Internal failure | 500 `internal_error`. The cause is in the log under the same `requestId`, redacted. |

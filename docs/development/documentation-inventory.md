@@ -24,7 +24,8 @@ A path ending in `/` covers everything under it. "Action" says what this round d
 | `docs/PRD.md` | A | Public | Product requirements | Milestones corrected, NFR-REL-004 added |
 | `docs/decisions/0001-owner-security-decisions-round-2.md` | A | Public | Owner decision record | None |
 | `docs/decisions/0002-foundation-completion-decisions.md` | A | Public | Owner decision record | None |
-| `docs/decisions/0003-foundation-closure-decisions.md` | A | Public | Owner decision record | Note on the license move in D-74 |
+| `docs/decisions/0003-foundation-closure-decisions.md` | A | Public | Owner decision record | Note on the license move in D-74. Supersession pointer for health endpoints in D-80 |
+| `docs/decisions/0004-health-endpoints-mvp-decision.md` | A | Public | Owner decision record D-86: health endpoints in the MVP | New |
 | `docs/decisions/README.md` | A | Public | Index and source-of-truth hierarchy | None |
 | `docs/decisions/pending/README.md` | A | Public | Status of proposals and applied proposals | None |
 | `docs/decisions/pending/S1-security-semantics.md` | A | Public | Detailed security specification (approved, D-64) | None |
@@ -39,6 +40,7 @@ A path ending in `/` covers everything under it. "Action" says what this round d
 | `docs/security/feasibility/` | B | Public | Sandbox and egress spike results. Reference-host description and `/tmp` scratch names are kept because they limit the claims. No credentials, no user names, no real targets. | Scanned, none |
 | `docs/development/tech-verification/` | B | Public | Primary-source version and behavior checks with fetch dates | Scanned, none |
 | `docs/development/agent-skills.md` | A | Public | How the development agent skills are installed and kept out of Git | License paragraphs updated |
+| `docs/development/getting-started.md` | A | Public | How to run and test the first scaffold, what is a placeholder, and the open deviations | New |
 | `docs/development/documentation-inventory.md` | A | Public | This file | New |
 | `.kiro/steering/product.md` | A | Public | Product definition | None |
 | `.kiro/steering/security.md` | A | Public | Security standards | None |

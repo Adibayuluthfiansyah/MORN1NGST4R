@@ -6,7 +6,7 @@ description: MORN1NGST4R system architecture. Use when designing or implementing
 
 # MORN1NGST4R architecture
 
-Status: draft for review, revision 8 (Round 6 foundation closure applied as D-63 to D-85, `LICENSE` and repository hygiene added; revision 7 contents: MVP platform decision applied, foundation audit corrections applied, owner approvals A1 to A4 of audit Round 1 adopted, owner security decisions of Round 2 adopted as D-30 to D-46, Round 3 amendments to D-30, D-32, D-33, D-35, D-38 and D-45 recorded, B1 security requirements applied to `security.md`, owner conservative decisions of Round 5 adopted as D-47 to D-62, technology baseline recorded in `tech.md`). No application code exists yet. This document refines `product.md`, `structure.md` and `security.md`. It does not replace them. Package boundaries, layering rules and security requirements come from them unchanged. The owner's confirmed MVP platform decision (D-16 to D-22) is narrower than their wording on desktop packaging, Windows, macOS and deployment modes. For the MVP that decision governs, and the passages it outdates are listed in section 19 under "Steering alignment" for the owner to approve. Those files are not edited here. The `MVP` citation refers to that decision as the owner gave it in the working session. It is not yet recorded in `product.md` or in an ADR, and section 19 lists that as an alignment item.
+Status: draft for review, revision 9 (D-86 added from record 0004, health endpoints in the MVP; revision 8: Round 6 foundation closure applied as D-63 to D-85, `LICENSE` and repository hygiene added; revision 7 contents: MVP platform decision applied, foundation audit corrections applied, owner approvals A1 to A4 of audit Round 1 adopted, owner security decisions of Round 2 adopted as D-30 to D-46, Round 3 amendments to D-30, D-32, D-33, D-35, D-38 and D-45 recorded, B1 security requirements applied to `security.md`, owner conservative decisions of Round 5 adopted as D-47 to D-62, technology baseline recorded in `tech.md`). Only the Phase 1 scaffold exists (see the plan). This document refines `product.md`, `structure.md` and `security.md`. It does not replace them. Package boundaries, layering rules and security requirements come from them unchanged. The owner's confirmed MVP platform decision (D-16 to D-22) is narrower than their wording on desktop packaging, Windows, macOS and deployment modes. For the MVP that decision governs, and the passages it outdates are listed in section 19 under "Steering alignment" for the owner to approve. Those files are not edited here. The `MVP` citation refers to that decision as the owner gave it in the working session. It is not yet recorded in `product.md` or in an ADR, and section 19 lists that as an alignment item.
 
 ## How to read this document
 
@@ -439,7 +439,7 @@ Failure behavior (fail closed):
 | Credential store unavailable | Operation fails with the alternatives explained. No plaintext fallback. |
 | LLM provider unavailable | AI features unavailable. Core workflow continues. |
 
-**[Decided in Round 6, D-80: `log/slog` with a redacting handler, health and metrics post-MVP]** (original question kept) O-14: logging library (standard library `log/slog` is a candidate, not a decision), error response format, metrics and health endpoints, and the audit volume policy for read-only polling. Audit tamper-evidence is proposed in P-33.
+**[Decided in Round 6, D-80: `log/slog` with a redacting handler, health and metrics post-MVP. Health part superseded by D-86: health and readiness endpoints are MVP, metrics stay post-MVP]** (original question kept) O-14: logging library (standard library `log/slog` is a candidate, not a decision), error response format, metrics and health endpoints, and the audit volume policy for read-only polling. Audit tamper-evidence is proposed in P-33.
 
 ## 18. Testing strategy and architectural boundaries
 
@@ -567,12 +567,13 @@ Proposed tests, including architecture tests (P-01, P-04, P-05, P-19, P-21, P-23
 | D-77 | Evidence storage defaults: redacted evidence of record, raw capture off by default, owner-only files, no encryption at rest in the MVP, retention by explicit audited purge. Closes: O-08, P-37. | `R6` 3.2 (`docs/decisions/0003-foundation-closure-decisions.md`) |
 | D-78 | Accepted residual risks: same-user trust boundary, no audit hash chain in the MVP, no HTTPS path visibility at the proxy, no I/O limit. Closes: T-61, T-51, T-37, RR-01, RR-04, RR-07, RR-12. | `R6` 3.2 (`docs/decisions/0003-foundation-closure-decisions.md`) |
 | D-79 | Localhost web controls: framing denial is required, Go validates Host, Origin and CSRF itself, and the serving path of P-49 is adopted with a verification gate. Closes: O-02, O-03, P-49, P-60, P-35 (framing), CD-06. | `R6` 3.2 (`docs/decisions/0003-foundation-closure-decisions.md`) |
-| D-80 | Engineering conventions adopted: spec-first OpenAPI, custom PostgreSQL queue with a bounded passive retry policy, `log/slog`, test tooling, UUID v7, forward-only migrations, Makefile start-up, data location. Closes: O-04, O-12, O-14, O-18, O-19, O-20, O-21, O-23, P-43 to P-47, P-61, P-62. | `R6` 4 (`docs/decisions/0003-foundation-closure-decisions.md`) |
+| D-80 | Engineering conventions adopted: spec-first OpenAPI, custom PostgreSQL queue with a bounded passive retry policy, `log/slog`, test tooling, UUID v7, forward-only migrations, Makefile start-up, data location. Closes: O-04, O-12, O-14, O-18, O-19, O-20, O-21, O-23, P-43 to P-47, P-61, P-62. The sentence "a health endpoint and metrics are post-MVP" is superseded for health endpoints by D-86 and stays as recorded. | `R6` 4 (`docs/decisions/0003-foundation-closure-decisions.md`) |
 | D-81 | AI provider scope and egress: one loopback adapter and one OpenAI-compatible remote adapter, no provider enabled by default, a loopback model is remote unless forwarding is verified off, prompts are not stored. Closes: O-26, O-10, P-53, P-34, P-11, CD-09. | `R6` 3.1 (`docs/decisions/0003-foundation-closure-decisions.md`) |
 | D-82 | Skills: `allowed-tools` is a request and never authority, bundled scripts are never run, the loader reads one configured directory. Closes: O-09, P-54. | `R6` 3.2 (`docs/decisions/0003-foundation-closure-decisions.md`) |
 | D-83 | Plan and PRD reconciliation: milestones M0 and M16 to M24 added, design proposals P-01 to P-05, P-36 and P-38 adopted. Closes: PM-01 to PM-06, CF-03, CF-04, O-25. | `R6` 5 (`docs/decisions/0003-foundation-closure-decisions.md`) |
 | D-84 | Repository hygiene policy: tracked and ignored categories, secrets scan, spike logs stay tracked. Closes: none. | `R6` 6, 7 (`docs/decisions/0003-foundation-closure-decisions.md`) |
 | D-85 | Credential store: `go-keyring` behind the `CredentialStore` port with a preflight, a gate for use outside a desktop session, headless Linux unsupported for credentials. Closes: O-17, P-59. | `R6` 4.4 (`docs/decisions/0003-foundation-closure-decisions.md`) |
+| D-86 | Health and readiness endpoints (`GET /api/v1/health/live` and `/ready`) are part of the MVP. Metrics stay post-MVP. Fixed minimal status words, no sensitive information, behind the Host allow-list on the loopback-only listener. Readiness confirms process initialization only until a probe exists. Supersedes the health part of D-80, the health part of O-14's resolution and `NFR-OBS-002`. | Owner instruction of 2026-11-16 (`docs/decisions/0004-health-endpoints-mvp-decision.md`) |
 
 ### Proposed (recommendations)
 
@@ -673,7 +674,7 @@ Proposed tests, including architecture tests (P-01, P-04, P-05, P-19, P-21, P-23
 | O-10 | LLM data egress policy and prompt retention (Round 2: remote provider definition decided, D-46. Final policy and retention still open.) Round 5: D-50 settles credential classes and locality. Prompt retention and the endpoint allow-list stay open. | Resolved in Round 6. D-81 with D-46 and D-50: prompts are not stored, the endpoint is the configured endpoint, remote needs per-program configuration. |
 | O-11 | Finding transition table, which transitions automation may apply, deduplication, reopening Verified. `P` 7 defines states, not transitions. | Resolved in Round 6. D-75: transition table, deduplication and reopening decided. |
 | O-12 | Queue library or custom, cancellation signaling Round 5: PROPOSED P-44, a custom queue. | Resolved in Round 6. D-80: custom PostgreSQL queue, bounded passive retries. |
-| O-14 | Logging library, error format, metrics, health, audit volume for read-only polling Round 5: PROPOSED P-45. | Resolved in Round 6. D-80: `log/slog` with a redacting handler. Health and metrics are post-MVP. |
+| O-14 | Logging library, error format, metrics, health, audit volume for read-only polling Round 5: PROPOSED P-45. | Resolved in Round 6. D-80: `log/slog` with a redacting handler. Health and metrics are post-MVP. Superseded for health by D-86: health and readiness endpoints are MVP, metrics stay post-MVP. |
 | O-16 | Local authentication for the single-user localhost MVP (mechanism, session lifetime, per-launch secret or password). Headless TLS and accounts are deferred (D-20). Round 5: the mechanism is decided (D-60). Recency P-39, hashing P-48, web controls P-60 and recovery O-37 are proposed. | Resolved in Round 6. D-60 and D-68: mechanism, bootstrap, recovery and hashing decided. |
 | O-17 | Which Linux credential sources the MVP implements. Rotation and entry flow. External secret managers deferred (D-20). Round 5: decided as Secret Service only with fail-closed behavior (D-52). Library P-59 is proposed. | Resolved in Round 6. D-52 and D-85: Secret Service only, go-keyring behind a port, verification gate for use outside a desktop session. |
 | O-18 | Architecture-test tooling, integration-test PostgreSQL (depends on O-01) Round 5: PROPOSED P-46. | Resolved in Round 6. D-80: test tooling decided. |
@@ -793,6 +794,14 @@ Proposed tests, including architecture tests (P-01, P-04, P-05, P-19, P-21, P-23
 | Moved 33 open items to the Resolved table. Eight stay open with a stated gate: O-07, O-13, O-22, O-32, O-33, O-35, O-36 and O-38. None blocks M1. | Section 19 |
 | Replaced the pending alignment table with a Round 6 resolution table. The old table is kept as history. | Section 19 |
 | Unchanged: every existing ID, the diagrams, the PostgreSQL option table. The E1 split mapping was generated against revision 7 and is stale. | Section 19 |
+
+### Revision log: D-86 (revision 9)
+
+| Change | Where |
+| --- | --- |
+| Added D-86 (health and readiness endpoints in the MVP). Annotated D-80, the O-14 text in section 17 and the O-14 resolution row with the supersession. D-80 and its original text are kept. | Section 17, section 19 |
+| Replaced "No application code exists yet" in the status paragraph with a pointer to the Phase 1 scaffold. | Status |
+| Unchanged: every other ID, the diagrams and every other decision. | |
 
 ### Steering alignment: resolved by owner approval (Round 1)
 
