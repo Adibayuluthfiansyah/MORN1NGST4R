@@ -6,9 +6,9 @@ License: Apache-2.0 (see `LICENSE`).
 
 ## Status
 
-**Foundation plus a first scaffold.** The application code is limited to a Go server skeleton with two health endpoints, configuration loading and a Next.js shell (see `docs/development/getting-started.md`). There is no authentication, no database, no worker and no scope or approval logic yet. The repository holds the product definition, the architecture, the security standards, the threat model, the product requirements, the decision records and the MVP implementation plan. Two throwaway feasibility spikes (`scripts/spikes/`) tested a sandbox and an egress path on one reference host. A passing spike does not mean a control is implemented. No security tool is executed by this repository, and no external target is tested.
+**Foundation plus a first scaffold.** The application code is a Go server skeleton with two health endpoints, configuration loading, a Next.js shell (see `docs/development/getting-started.md`) and the M1 scope package, a pure standard-library domain package that parses scope rules and evaluates names and literals. Nothing calls the scope package yet. There is no authentication, no database, no worker, no address policy and no approval logic. The repository holds the product definition, the architecture, the security standards, the threat model, the product requirements, the decision records and the MVP implementation plan. Two throwaway feasibility spikes (`scripts/spikes/`) tested a sandbox and an egress path on one reference host. A passing spike does not mean a control is implemented. No security tool is executed by this repository, and no external target is tested.
 
-The MVP is a local-first web application on Linux localhost: a Go backend (Gin, PostgreSQL), a separate worker process, and a Next.js frontend. The first domain milestone is M1, a pure standard-library scope canonicalization package. It is not started.
+The MVP is a local-first web application on Linux localhost: a Go backend (Gin, PostgreSQL), a separate worker process, and a Next.js frontend. The first domain milestone is M1, a pure standard-library scope canonicalization package. It is implemented (decision record 0005). The next milestones follow the plan.
 
 ## Where to read
 

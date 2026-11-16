@@ -1,6 +1,6 @@
 # MORN1NGST4R MVP Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. The readiness gate below is closed by decision record 0003. Starting M1 still needs the owner to say go.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. The readiness gate below is closed by decision record 0003. M1 is implemented (decision record 0005). Starting any later milestone still needs the owner to say go.
 
 **Goal:** Deliver one complete, authorized, end-to-end assessment on a Linux localhost web application, in small milestones that each end in an independently tested deliverable.
 
@@ -12,7 +12,7 @@
 
 ## Readiness gate (closed by decision record 0003)
 
-The four gates that blocked M1 are closed by `docs/decisions/0003-foundation-closure-decisions.md`. Apart from the Phase 1 scaffold described below, nothing in this plan has been implemented. Closing a gate means a decision exists, not that a control works.
+The four gates that blocked M1 are closed by `docs/decisions/0003-foundation-closure-decisions.md`. Apart from the Phase 1 scaffold described below and M1 (implemented, see its status line), nothing in this plan has been implemented. Closing a gate means a decision exists, not that a control works.
 
 | Gate | Closed by | State |
 | --- | --- | --- |
@@ -32,7 +32,7 @@ On the owner's instruction a scaffold was built before M1. It is not a milestone
 - `apps/web`: a Next.js App Router shell with a backend status line and the same-origin rewrite. It has no authentication, no generated client and no nonce CSP. Those stay in M13.
 - A `Makefile`, `.env.example` and `docs/development/getting-started.md`.
 
-Not built: authentication, sessions, CSRF and Origin checks (M4), PostgreSQL and migrations (M3), the worker (M7), any scope, policy or approval logic (M1, M2), and any tool, sandbox or egress code. The M0 acceptance below describes the foundation commit and stays true of it.
+Not built: authentication, sessions, CSRF and Origin checks (M4), PostgreSQL and migrations (M3), the worker (M7), any policy or approval logic (M2), and any tool, sandbox or egress code. The scope package of M1 was added after the scaffold (see M1). The M0 acceptance below describes the foundation commit and stays true of it.
 
 ## Source-of-truth hierarchy (D-63)
 
@@ -50,7 +50,7 @@ Not built: authentication, sessions, CSRF and Origin checks (M4), PostgreSQL and
 - No network-touching tool adapter before the egress path passes its regression gate. No tool execution without the sandbox self-test passing (D-31, D-41, D-42).
 - Secrets: Secret Service only, fail closed. Never in argv, environment, standard input, logs or ordinary files (D-52, D-85). The bootstrap secret lives only on a memory-backed file (D-68).
 - No commit, push or merge unless the owner asks for it in that request. The commit steps below are written for when the owner has asked.
-- Every decision here is a requirement or a direction. Apart from the Phase 1 scaffold below, nothing in this plan is implemented, and no security control counts as verified until a test demonstrates it (`security.md` 18).
+- Every decision here is a requirement or a direction. Apart from the Phase 1 scaffold below and M1, nothing in this plan is implemented, and no security control counts as verified until a test demonstrates it (`security.md` 18).
 - Tests that need `internal/` access live inside the Go module (D-27). Security regression tests are required for every security-critical task (`security.md` 16).
 
 ## Review Focus
@@ -69,12 +69,12 @@ These inputs are implied by the spec and are exercised by named tests in the tas
 | --- | --- |
 | `services/core/go.mod` | Module `github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core`, `go 1.26.0` floor, no `toolchain` line. The Phase 1 scaffold added Gin v1.12.0 and its indirect modules. The domain packages of M1 add none |
 | `services/core/internal/domain/scope/host.go` | `Host` canonical ASCII name value type and `ParseHost` |
-| `services/core/internal/domain/scope/addr.go` | `Addr`, `Prefix` parsing with `net/netip`, canonical forms, embedded-IPv4 rejection |
+| `services/core/internal/domain/scope/addr.go` | `ParseAddr`, `ParseInclusionPrefix`, `ParseExclusionPrefix`, `PrefixMin` with its floor (D-87), canonical forms, embedded-IPv4 rejection including SIIT (D-88) |
 | `services/core/internal/domain/scope/port.go` | `PortSet` parsing and default sets |
 | `services/core/internal/domain/scope/rule.go` | `Rule`, `RuleKind` (domain, wildcard, ip, cidr), registration validation |
 | `services/core/internal/domain/scope/evaluate.go` | `RuleSet.Evaluate(Target) Decision` (names and literals only, no resolution) |
-| `services/core/internal/domain/scope/*_test.go` | Table-driven and fuzz tests |
-| `services/core/tests/architecture/deps_test.go` | Dependency-direction test over `go list -json`. It exists since the Phase 1 scaffold. The domain order table is added with the first domain package |
+| `services/core/internal/domain/scope/*_test.go` | Table-driven, property and fuzz tests |
+| `services/core/tests/architecture/deps_test.go` | Dependency-direction test over `go list -json`. It exists since the Phase 1 scaffold. M1 extended it to the scope package (standard library only, `net/netip` from the `net` family, no `crypto/tls`, `crypto/rand` or `math/rand`) |
 | `Makefile` | `make test`, build and run targets exist since the Phase 1 scaffold. PostgreSQL and worker targets arrive with M3 and M7 |
 
 ---
@@ -146,6 +146,8 @@ The MVP is accepted when, on the baseline host, a researcher can register a prog
 
 Deliverable: a stdlib-only `scope` domain package that parses rules and targets into canonical form and evaluates them by name or literal address, with wildcard inclusion refused. No resolution, no I/O.
 
+**M1 status (2026-11-17): implemented.** The package is `services/core/internal/domain/scope`. Where the task text below names an older shape, the final interfaces are in the Produces lines of Tasks 1.3 and 1.4 and in `docs/decisions/0005-m1-scope-engine-closure-decisions.md`. The checkboxes below are the original script and are not ticked, because `scripts/validate-foundation.py` forbids ticked tasks. The commit steps are not done: the owner commits. `Decision` does not yet name the deciding rule (D-91, before M16 and at the latest before M18). Scope: names and literals only. A scope decision is not readiness (D-89).
+
 ### Task 1.1: Module scaffold and architecture test
 
 **Files:**
@@ -180,11 +182,11 @@ Deliverable: a stdlib-only `scope` domain package that parses rules and targets 
 - Create: `services/core/internal/domain/scope/addr.go`, `port.go`, and tests
 
 **Interfaces:**
-- Produces: `func ParseAddr(s string) (netip.Addr, error)` (canonical, zone rejected, IPv4-mapped IPv6 unmapped to IPv4, NAT64, 6to4, Teredo and `::/96` embedded forms rejected as `ErrAmbiguous`); `func ParsePrefix(s string, min PrefixMin) (netip.Prefix, error)` (host bits set, `/0`, shorthand `10/8` and below the minimum rejected); `type PortSet`, `func ParsePorts(s string) (PortSet, error)`; `DefaultInScopePorts` (80, 443) and `AllPorts`.
+- Produces: `func ParseAddr(s string) (netip.Addr, error)` (canonical, zone rejected, IPv4-mapped IPv6 unmapped to IPv4, NAT64, 6to4, Teredo, SIIT `::ffff:0:0:0/96` (D-88) and the whole of `::/96` embedded forms rejected as `ErrAmbiguous`); `func ParseInclusionPrefix(s string, min PrefixMin) (netip.Prefix, error)` (host bits set, shorthand `10/8`, `/0` and anything below the minimum rejected, `ErrMinimumUnset` for an unset minimum, any overlap with an embedded range rejected); `func ParseExclusionPrefix(s string) (netip.Prefix, error)` (no minimum, `/0` accepted for its own address family, a prefix equal to or inside an embedded range rejected); `type PrefixMin` (opaque, `DefaultPrefixMin()`, `NewPrefixMin(v4, v6)`, floor `MinPrefixLenV4` 24 and `MinPrefixLenV6` 48, D-87); `type PortSet`, `func ParsePorts(s string) (PortSet, error)`; `DefaultInScopePorts` (80, 443) and `AllPorts`.
 
-- [ ] **Step 1: Write failing tests**: `::ffff:127.0.0.1` and `::ffff:7f00:1` parse to `127.0.0.1`; `::1%eth0`, `64:ff9b::cb00:7107`, `2002::1`, `::127.0.0.1` return `ErrAmbiguous`; `203.0.113.5/24` (host bits set), `0.0.0.0/0`, `198.51.0.0/16` (shorter than the /24 minimum) and `2001:db8::/32` (shorter than the /48 minimum) are rejected with the default minimum, `10/8` shorthand is rejected with every minimum, and with a zero minimum (the exclusion case, choice 1) `0.0.0.0/0`, `198.51.0.0/16` and `2001:db8::/32` are accepted while host bits and shorthand are still rejected; `203.0.113.0/24`, `203.0.113.0/25` and `2001:db8:1::/48` are accepted; ports `0`, `65536`, `08080`, `80,80` are rejected and `8443` parses.
+- [ ] **Step 1: Write failing tests**: `::ffff:127.0.0.1` and `::ffff:7f00:1` parse to `127.0.0.1`; `::1%eth0`, `64:ff9b::cb00:7107`, `2002::1`, `::127.0.0.1` return `ErrAmbiguous`; `203.0.113.5/24` (host bits set), `0.0.0.0/0`, `198.51.0.0/16` (shorter than the /24 minimum) and `2001:db8::/32` (shorter than the /48 minimum) are rejected with the default minimum, `10/8` shorthand is rejected with every minimum, and as exclusions (`ParseExclusionPrefix`, choice 1) `0.0.0.0/0`, `198.51.0.0/16` and `2001:db8::/32` are accepted while host bits and shorthand are still rejected; `203.0.113.0/24`, `203.0.113.0/25` and `2001:db8:1::/48` are accepted; ports `0`, `65536`, `08080`, `80,80` are rejected and `8443` parses.
 - [ ] **Step 2: Run** the tests. Expected: FAIL.
-- [ ] **Step 3: Implement** with `net/netip` only. `PrefixMin` holds the IPv4 and IPv6 minimum lengths and defaults to 24 and 48. It is a value passed in, never a package variable, so only an explicit policy change can alter it. Exclusions pass a zero `PrefixMin`.
+- [ ] **Step 3: Implement** with `net/netip` only. `PrefixMin` holds the IPv4 and IPv6 minimum lengths, has unexported fields and defaults to 24 and 48, which is also its floor (D-87). It is a value passed in, never a package variable, so only an explicit policy change can alter it, and never below the floor. Exclusions use `ParseExclusionPrefix`, which takes no minimum.
 - [ ] **Step 4: Run** the tests. Expected: PASS.
 
 ### Task 1.4: Rules and evaluation
@@ -194,7 +196,7 @@ Deliverable: a stdlib-only `scope` domain package that parses rules and targets 
 
 **Interfaces:**
 - Consumes: `Host`, `netip.Addr`, `netip.Prefix`, `PortSet`.
-- Produces: `type RuleKind int` with `KindDomain`, `KindWildcard`, `KindIP`, `KindCIDR`; `type Rule struct{ Kind RuleKind; Exclude bool; Host Host; Addr netip.Addr; Prefix netip.Prefix; Ports PortSet }`; `func NewRule(kind RuleKind, exclude bool, value string, ports string, min PrefixMin) (Rule, error)`; `type Target struct{ Host Host; Addr netip.Addr; Port uint16 }`; `type Decision struct{ Allowed bool; Reason string }`; `type UnsupportedExclusionError struct{ Input string }`; `func (rs RuleSet) Evaluate(t Target) Decision`.
+- Produces: `type RuleKind int` with `KindDomain`, `KindWildcard`, `KindIP`, `KindCIDR`; `type Rule` (unexported fields, accessors `Kind`, `Exclude`, `Host`, `Addr`, `Prefix`, `Ports` and `Value`); `func NewRule(kind RuleKind, exclude bool, value string, ports string, min PrefixMin) (Rule, error)`; `type Target struct{ Host Host; Addr netip.Addr; Port uint16 }`; `type Decision struct{ Allowed bool; Reason string }`; `type UnsupportedExclusionError struct{ Kind RuleKind; Input string; Ports string; Err error }`; `func ParseTarget(value string, port uint16) (Target, error)`; `func (rs RuleSet) Evaluate(t Target) Decision`.
 
 - [ ] **Step 1: Write failing tests**: `NewRule(KindWildcard, false, "*.example.com", ...)` returns an error (inclusion refused, D-35). `NewRule(KindWildcard, true, "*.internal.example.com", ...)` succeeds (exclusion accepted). A CIDR exclusion `/16` succeeds and a `/16` inclusion fails. `Evaluate` cases: no rule matches then denied; an in-scope `example.com` allows `example.com:443` and denies `:8443`; an exclusion `example.com` with no ports denies `example.com:8443` even when an inclusion lists `8443`; an exclusion `*.x.example.com` does not cover `x.example.com`; a wildcard exclusion covers `a.b.x.example.com`; an in-scope `ip` rule allows only that address; an exclusion CIDR beats an inclusion IP inside it; a URL path, regex or scheme in a rule value returns an error. An exclusion whose syntax the grammar refuses returns an `*UnsupportedExclusionError` carrying the original text, and `errors.As` distinguishes it from the error for an unsupported inclusion, so the application layer can record it and block readiness (choice 10). A wildcard exclusion with a non-ASCII byte is refused as ambiguous in M1.
 - [ ] **Step 2: Run** the tests. Expected: FAIL.
@@ -213,6 +215,8 @@ Deliverable: a stdlib-only `scope` domain package that parses rules and targets 
 - [ ] **Step 5: Commit** only if the owner asked for commits.
 
 **M1 acceptance:** G-arch and G-scope pass, every S1.1 case for names and literals has a test, wildcard inclusion is refused, exclusions are accepted, and the package imports only the standard library.
+
+**M1 acceptance result (2026-11-17):** the Go tests (table, property and seven fuzz targets), the architecture test and `make test` pass. An independent probe of the S1.1 test list reproduced the cases for case and dots, numeric hosts, IPv4-mapped and embedded IPv6 forms, hostile names, ports, CIDR, exclusion precedence, wildcard exclusions and the hostname-exclusion residual risk. The IDNA cases of S1.1 (`fuß.de`, the ideographic full stop, the soft hyphen, `XN--` labels) and the public suffix cases belong to M1b and O-32. The package refuses every non-ASCII name and every wildcard inclusion. Remaining open items are listed in section 6 of the decision record.
 
 ---
 
@@ -236,7 +240,7 @@ Depends on: M2. Deliverable: PostgreSQL 18 per-user cluster scripts (D-67), goos
 Depends on: M3. Deliverable: one local account, Argon2id (benchmarked), server-side sessions with hashed tokens, HttpOnly cookie, CSRF token, Host and Origin checks, login rate limiting, the bootstrap secret on a memory-backed file, the one-time recovery code, password re-entry for intrusive approval and widening policy changes (default every time). No API tokens. Acceptance: G-auth, a test that bootstrap is refused without a memory-backed location, a recovery reuse test, and browser-level tests for DNS rebinding and cookie sharing across localhost ports (unverified today, T-55, T-57).
 
 ### M5: Audit model
-Depends on: M3. Deliverable: `audit` domain, `AuditSink` port and PostgreSQL adapter, bounded retries with a persistent alert, the events of `security.md` 13. Acceptance: an operation does not start when the record cannot be written, and denials and cancellations still take effect.
+Depends on: M3. Deliverable: `audit` domain, `AuditSink` port and PostgreSQL adapter, bounded retries with a persistent alert, the events of `security.md` 13. Acceptance: an operation does not start when the record cannot be written, and denials and cancellations still take effect. The scope-evaluation event has a field for the deciding rule, so the field shape of D-91 is reviewed here.
 
 ### M6: Evidence metadata and integrity
 Depends on: M3, M5. Deliverable: the write-once publish protocol (temp file, `O_EXCL`, hash, fsync, `link`, directory fsync), SHA-256 metadata, re-hash on read, owner-only permissions, redaction before write (D-77). Acceptance: a swap or overwrite is detected, an existing name is never replaced, raw capture is off by default.
@@ -248,7 +252,7 @@ Depends on: M2, M3, M5. Deliverable: claim, lease, fencing, heartbeat, cancellat
 Depends on: M7. Deliverable: a Go launcher that reproduces the spike's argument set: empty environment for the helper, read-only root and `/dev`, closed descriptors, seccomp filter (x86_64), the required limits of D-70 including a size-bounded memory-backed working directory, a sealed in-memory copy of the verified tool bytes passed with `--ro-bind-data`, the per-launch preflight, and a start-up self-test that refuses and names the missing layer. Acceptance: G-sandbox on the named baseline, a test per simulated missing layer, regression tests derived from the spike S-suite. The spike suite tests the Python spike launcher, not the product.
 
 ### M9: Egress enforcement
-Depends on: M1, M8, M17. Deliverable: first-party HTTP client (resolve once, dial the validated IP, per-hop redirect evaluation) and a policy proxy with one Unix socket per job, a relay inside the namespace, refusal of Host overrides, and a tunnel revocation hook. The path carries the registered initial target so that only that connection can use a lab exemption. Address deny tables generated from the IANA registries with a pinned SHA-256 and recorded version (D-39) plus the named metadata entries (D-72). Acceptance: G-egress.
+Depends on: M1, M8, M17. Deliverable: first-party HTTP client (resolve once, dial the validated IP, per-hop redirect evaluation) and a policy proxy with one Unix socket per job, a relay inside the namespace, refusal of Host overrides, and a tunnel revocation hook. The path carries the registered initial target so that only that connection can use a lab exemption. Address deny tables generated from the IANA registries with a pinned SHA-256 and recorded version (D-39) plus the named metadata entries (D-72). These tables and their decision function are the one address policy that M17, M18 and M21 reach through a port (D-89). Acceptance: G-egress. The test cases include every special-purpose class, `::ffff:0:0:0/96` and every IPv6 address outside `2000::/3`.
 
 ### M10: Tool adapter framework
 Depends on: M2, M8, M9. Deliverable: manifest schema (risk class, destinations, flags, secret delivery), per-parameter validation, option-injection guards, exact-bytes launch, JSONL parsing with strict schemas. Acceptance: S1.4 cases and a hostile-output corpus. No real tool yet.
@@ -269,22 +273,22 @@ Depends on: M6, M22. Deliverable: Markdown report from `text/template`, untruste
 Depends on: M11, M14, M22b, M23, M24. Deliverable: the acceptance scenario above against a local lab registered under D-47, with all gates green. Acceptance: that scenario passes end to end on the baseline host, every denial and approval in it is audited, and no external target is involved. Intrusive steps only when D-58 is satisfied.
 
 ### M16: Program, target, scope and assessment records
-Depends on: M1, M2, M4, M5. Deliverable: application use cases to register a program with a rules reference and version, register targets, publish scope versions, record refused exclusions, create an assessment in draft with its target set (labs and validation need it), and the single policy store port with audited changes and re-authentication for widening changes. Gate G-openapi must pass before code is generated from the API contract. Acceptance: a refused exclusion blocks readiness until acknowledged or replaced (choice 10), every policy change records old value, new value, actor, time and reason, an AI or worker actor is refused, a widening change without fresh password entry is refused.
+Depends on: M1, M2, M4, M5. Deliverable: application use cases to register a program with a rules reference and version, register targets, publish scope versions, record refused exclusions, create an assessment in draft with its target set (labs and validation need it), and the single policy store port with audited changes and re-authentication for widening changes. Gate G-openapi must pass before code is generated from the API contract. Acceptance: a refused exclusion blocks readiness until acknowledged or replaced (choice 10), every policy change records old value, new value, actor, time and reason, an AI or worker actor is refused, a widening change without fresh password entry is refused. The CIDR minimum is validated with `NewPrefixMin` and never goes below the floor of /24 and /48 (D-87). Loosening it is a widening change, and every change creates a version and an audit event and makes validations and approvals bound to the earlier snapshot stale (D-90). The matched rule identifier of `scope.Decision` is implemented and tested before M16 starts (D-91).
 
 ### M17: Lab registration and lifecycle
 Depends on: M2, M5, M16. Deliverable: lab registration bound to a program and an assessment with exact target kind, permitted range, ports for loopback and local-interface addresses, expiry and revocation that invalidate dependent jobs, never a replacement for scope validation. Acceptance: a public name that resolves into a lab range does not inherit it, the CIDR minimum applies, forbidden address classes are refused, every change is audited.
 
 ### M18: Target authorization validation
-Depends on: M4, M5, M16, M17. Deliverable: the validation record (mechanical scope result, program-rule reference, human attestation), bound to the canonical target-set hash and the rules version, lab-specific wording, 24-hour expiry that stops new launches only. Acceptance: any scope, rules or lab change makes it stale, an AI attestation is refused, the interface does not call it proof of ownership.
+Depends on: M4, M5, M16, M17. Deliverable: the validation record (mechanical scope result, program-rule reference, human attestation), bound to the canonical target-set hash and the rules version, lab-specific wording, 24-hour expiry that stops new launches only. Acceptance: any scope, rules or lab change makes it stale, an AI attestation is refused, the interface does not call it proof of ownership. It also goes stale when the policy snapshot changes (D-90). A target is recorded as allowed only when the scope decision and the address policy both allow (D-89), the two reasons are stored separately, and with the address policy unavailable the result is deny. Tests cover loopback, private, shared-address, link-local, metadata, unspecified, multicast and reserved literals. `matched_scope_rule_id` is stored (D-91).
 
 ### M19: Operations, plan items and the approval application lifecycle
-Depends on: M2, M3, M4, M5, M16, M18. Deliverable: canonical operations and plan items (an approval binds one operation of one plan item), then request, approve (rendered only from the canonical operation, with password re-entry for intrusive operations), revoke and consume use cases. Acceptance: G-consume and G-auth, an approval cannot authorize an unrelated operation, an AI actor cannot approve.
+Depends on: M2, M3, M4, M5, M16, M18. Deliverable: canonical operations and plan items (an approval binds one operation of one plan item), then request, approve (rendered only from the canonical operation, with password re-entry for intrusive operations), revoke and consume use cases. Acceptance: G-consume and G-auth, an approval cannot authorize an unrelated operation, an AI actor cannot approve, and an approval bound to an earlier policy snapshot is not consumable after a policy change (D-90).
 
 ### M20: Asset and endpoint inventory
 Depends on: M1, M3, M16. Deliverable: domains, addresses, services, HTTP services, technologies, endpoints and parameters with origin and an append-only observation history (D-76). Acceptance: a repeated run adds an observation and overwrites nothing, a discovered asset is flagged as an observation until scope evaluation passes, no scheduler exists.
 
 ### M21: Assessment lifecycle and job creation
-Depends on: M16, M18, M19, M20. Deliverable: the assessment transitions (ready, start, pause, resume, complete, cancel), the status summary, and the use case that creates a job from an accepted plan item at E1. Acceptance: a plan item cannot become a job without a policy decision and, where required, an approved approval for the same operation hash, and a stale validation blocks ready, start and resume.
+Depends on: M16, M18, M19, M20. Deliverable: the assessment transitions (ready, start, pause, resume, complete, cancel), the status summary, and the use case that creates a job from an accepted plan item at E1. Acceptance: a plan item cannot become a job without a policy decision and, where required, an approved approval for the same operation hash, and a stale validation blocks ready, start and resume. Ready, start and resume also fail closed when the address policy is unavailable (D-89).
 
 ### M22: Finding lifecycle, validation and human verification
 Depends on: M4, M5, M6, M20. Deliverable: the seven states and the transition table of D-75, deduplication key, validation records linked to evidence, report status separate from validation status, the Verified transition for a human actor only. Acceptance: an AI, worker or tool actor cannot set Verified, a refused attempt is audited, Verified is refused when evidence fails its integrity check or no validation record exists, a duplicate observation never changes a state.
@@ -303,7 +307,7 @@ Depends on: M5. Deliverable: the `CredentialStore` port and a Secret Service ada
 
 ## Self-review
 
-- **Decision coverage:** D-47 to D-61 map to milestones as before. D-62 to D-85: D-63 to D-65 M0, M1. D-66 M13. D-67 M3. D-68 and D-69 M4 and M19. D-70 M8. D-71 M7, M10, M11. D-72 M9. D-73 M1, M1b. D-74 M0. D-75 M14 and M22. D-76 M11, M20, M22b. D-77 M6. D-78 accepted risks. D-79 M13. D-80 M3, M7. D-86 (record 0004, health endpoints) Phase 1 scaffold and M3. D-81 M12. D-82 M23. D-83 this plan. D-84 M0. D-85 M25.
+- **Decision coverage:** D-47 to D-61 map to milestones as before. D-62 to D-85: D-63 to D-65 M0, M1. D-66 M13. D-67 M3. D-68 and D-69 M4 and M19. D-70 M8. D-71 M7, M10, M11. D-72 M9. D-73 M1, M1b. D-74 M0. D-75 M14 and M22. D-76 M11, M20, M22b. D-77 M6. D-78 accepted risks. D-79 M13. D-80 M3, M7. D-86 (record 0004, health endpoints) Phase 1 scaffold and M3. D-81 M12. D-82 M23. D-83 this plan. D-84 M0. D-85 M25. D-87 M1, M16, M17. D-88 M1. D-89 M18, M21 (the policy itself is M9 and M17). D-90 M16, M18, M19. D-91 recorded in M1, built before M16 and at the latest before M18, field shape reviewed in M5.
 - **Requirement coverage:** every FR of the PRD appears in the milestone map above. The validator checks this.
 - **Proportion:** only M1 is expanded to test level. The rest are definitions on purpose, because their interfaces depend on earlier milestones.
 - **Open items carried:** O-07, O-13, O-22, O-32, O-33, O-35, O-36 and O-38 each appear as a gate or note above. None blocks M1.

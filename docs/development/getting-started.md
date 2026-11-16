@@ -11,6 +11,7 @@ This page covers the first implementation phase: the Go server skeleton, the web
 | Inbound HTTP adapter (Gin): request id, Host allow-list, access log, panic recovery, error envelope | Implemented |
 | `GET /api/v1/health/live` and `GET /api/v1/health/ready` | Implemented |
 | Dependency-direction test (gate G-arch) | Implemented |
+| `internal/domain/scope` (M1): host, address, prefix and port parsing, rules, `RuleSet.Evaluate`. Standard library only, not called by any other package yet | Implemented |
 | `apps/web` Next.js App Router shell with a backend status line (5 s request timeout, re-checks every 5 s until the backend is ready) and a same-origin rewrite | Implemented |
 | Redacting `log/slog` logger | Implemented (by key name only) |
 
@@ -21,7 +22,7 @@ This page covers the first implementation phase: the Go server skeleton, the web
 | Readiness probes | None registered. Readiness only says the process is initialized. The database probe comes with M3 |
 | Authentication, sessions, CSRF, Origin checks | Not implemented (M4). The only routes are the two public health probes |
 | `cmd/worker`, jobs, claiming, tool execution, sandbox, egress | Not created. They wait for G-recovery and G-consume |
-| PostgreSQL, migrations, sqlc, domain packages | Not created (M3 and later) |
+| PostgreSQL, migrations, sqlc, and every domain package except `scope` | Not created (M2, M3 and later) |
 | OpenAPI generation | Not done. Gate G-openapi has not passed. The health routes are not in `docs/design/api/openapi.yaml` and the web client is hand-written |
 | Nonce Content-Security-Policy, login and bootstrap screens, design system | Not done (M13). Only `frame-ancestors 'none'` and three static headers are set |
 | Tailwind, shadcn/ui, TanStack Query, Zustand, form libraries, ESLint, Playwright | Not installed. They are listed in `tech.md` and enter with the milestone that needs them |
@@ -91,13 +92,14 @@ One manual run on the reference host (Next.js 16.4.6 with `next start`, API on a
 - `services/core/internal/application/health`: readiness needs every probe, a stuck probe is bounded by the timeout, only the probe name is logged, a panicking probe is an unhealthy result and not a crash, no probe starts once the context is done, and probe goroutines do not accumulate.
 - `services/core/internal/adapters/inbound/http/router`: Host allow-list on every route, error envelope shape, request id handling, the API-19 headers on every response, panic containment with Recovery as the outermost middleware (a panic before the request-id middleware still gets an id and headers, a response that already started is not corrupted, a failing logger cannot break a response), one access record per request including a panicked one, no query or header values in the access log.
 - `services/core/internal/bootstrap` and `cmd/server`: real HTTP over a loopback listener, header size limit, slow-header timeout, graceful shutdown, refusal of a non-loopback listener, the server's logger redacts secret-named attributes, and 33 raw-request cases (absolute-form targets, duplicate, empty and malformed Host headers, HTTP/1.0, `OPTIONS *`, CONNECT, forwarding headers that must not be trusted, malformed junk). A denied Host never receives the health answer.
+- `services/core/internal/domain/scope`: table, property and fuzz tests (`go test -fuzz=FuzzParseAddr` and the six other `Fuzz` targets) for hosts, addresses, prefixes, ports, rules and evaluation, including the `PrefixMin` floor (D-87) and the SIIT range (D-88).
 - `services/core/tests/architecture`: dependency directions of `structure.md` 5.6 applied to the real packages for linux/amd64, test files included. Standard library versus third-party comes from `go list` metadata. Forbidden standard-library families match by prefix (`net/http/httputil`, `database/sql/driver`), process creation (`os/exec`, `syscall`, `os.StartProcess`) and plugin loading are refused outside a tools adapter, and source excluded by build constraints on every checked platform fails the test. An unknown internal package, an unreported import such as cgo, or an unlisted third-party import fails closed. The rule engine has its own regression tests.
 - `apps/web`: the readiness client (strict parsing, no credentials, bounded by a timeout that also covers a stalled body, no timer left behind), the status component (a rejected or throwing check shows unreachable, sequential re-polling that stops on ready and on unmount), the API origin and header helpers, and `next.config.ts` itself (the rewrite target, the refusal of a non-loopback origin, the page headers and their exclusion of `/api/`).
 
 ## Deviations and open items for the owner
 
 - Health endpoints. Kept in the MVP by D-86 (`docs/decisions/0004-health-endpoints-mvp-decision.md`), which supersedes D-80 for health endpoints. Metrics stay post-MVP.
-- Milestone. The scaffold is recorded in the plan as existing preparatory work. It is not a milestone and M1 has not started.
+- Milestone. The scaffold is recorded in the plan as existing preparatory work and is not a milestone. M1 (the `scope` package) is implemented. It decides scope only. It does not decide readiness (D-89), and `Decision` does not name the deciding rule yet (D-91). See `docs/decisions/0005-m1-scope-engine-closure-decisions.md`.
 - `405 method_not_allowed` is in the error catalog of `docs/design/api/error-model.md`.
 - Host behavior through the Next.js rewrite is unverified (see the section above). Closing it is part of M13.
 - Toolchain selection. `mise.toml` pins Go 1.27.4 and Node 24.22.3. Install them once with `mise install go@1.27.4 node@24.22.3` and run commands through `mise exec -- make test`, or activate mise in your shell. mise is optional. Any installation of these versions works, and other installed versions are left alone.
