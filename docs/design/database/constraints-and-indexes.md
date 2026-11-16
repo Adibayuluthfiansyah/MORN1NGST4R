@@ -135,6 +135,7 @@ Status: design proposal. These are specifications, not executable SQL. Names fol
 - `c1`: CHECK setting_key IN (cidr_minimum_v4, cidr_minimum_v6, approval_defaults, attempt_maximum, risk_overrides, audit_retry_bound, login_rate_limit, evidence_retention, verification_requires_reauth)
 - `c2`: UNIQUE (setting_key, version_no)
 - `c3`: CHECK NOT widening OR reauth_grant_id IS NOT NULL
+- `c4`: CHECK CASE setting_key WHEN 'cidr_minimum_v4' THEN jsonb_typeof(value) = 'number' AND (value #>> '{}')::numeric BETWEEN 24 AND 32 WHEN 'cidr_minimum_v6' THEN jsonb_typeof(value) = 'number' AND (value #>> '{}')::numeric BETWEEN 48 AND 128 ELSE true END -- the floor of /24 and /48 (D-87), second line of defence behind `scope.NewPrefixMin`. CASE guarantees that the cast runs only for the two keys
 
 | Index | Definition | Query pattern it serves |
 | --- | --- | --- |

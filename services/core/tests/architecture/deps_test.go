@@ -19,8 +19,8 @@
 // therefore runs for linux/amd64 and refuses code it cannot see. When another
 // platform is approved, add it to `platforms` and the check runs per platform.
 //
-// Not covered yet: the domain dependency order table of structure.md 5.6,
-// because no domain package exists. Add it with the first domain package.
+// Domain packages follow the dependency order table of structure.md 5.6
+// (domainOrder below). A domain package that is not in the table fails.
 package architecture_test
 
 import (
@@ -64,10 +64,46 @@ type rule struct {
 	// forbidStd lists standard library package families the group must not
 	// import. "net/http" forbids net/http and everything below it.
 	forbidStd []string
+	// exceptStd lists standard library packages that stay allowed although a
+	// forbidden family contains them. "net/netip" is the one member of the
+	// "net" family that the domain may use: pure value types, no resolver.
+	exceptStd []string
+	// forbidStdProd lists families that are forbidden in the production files
+	// of the group and allowed in its test files. math/rand is out of the
+	// scope engine because it must be deterministic, while its seeded property
+	// tests use math/rand/v2.
+	forbidStdProd []string
+}
+
+// domainOrder is the table of structure.md 5.6: the domain packages that a
+// domain package may import. Only ID types and value objects may cross.
+var domainOrder = map[string][]string{
+	"operation":  {},
+	"actor":      {},
+	"program":    {},
+	"identity":   {"actor"},
+	"audit":      {"actor"},
+	"target":     {"program"},
+	"approval":   {"operation", "actor"},
+	"scope":      {"target", "operation", "approval"},
+	"assessment": {"program", "target"},
+	"asset":      {"assessment", "target"},
+	"job":        {"assessment", "operation", "approval", "actor"},
+	"evidence":   {"assessment", "job", "operation"},
+	"finding":    {"assessment", "asset", "evidence"},
+	"validation": {"finding", "evidence", "job"},
 }
 
 var rules = []rule{
-	{prefix: "internal/domain", forbidStd: std("net/http", "database/sql")},
+	// The domain never resolves names or touches the network, so "net" is out.
+	// Domain-to-domain imports are checked against domainOrder.
+	{prefix: "internal/domain", internal: []string{"internal/domain"}, forbidStd: std("net", "database/sql"), exceptStd: []string{"net/netip"}},
+	// The scope engine is deterministic: no clock, no file system, no environment.
+	// Only net/netip is allowed from the net family. No TLS, no randomness.
+	{prefix: "internal/domain/scope", internal: []string{"internal/domain"},
+		forbidStd:     std("net", "database/sql", "os", "time", "io/fs", "path/filepath", "log", "crypto/tls", "crypto/rand"),
+		exceptStd:     []string{"net/netip"},
+		forbidStdProd: []string{"math/rand"}},
 	{prefix: "internal/application", internal: []string{"internal/domain", "internal/ports"}, forbidStd: std("net/http", "database/sql")},
 	{prefix: "internal/ports", internal: []string{"internal/domain", "internal/ports"}, forbidStd: std("net/http", "database/sql")},
 	{prefix: "internal/adapters/inbound", internal: []string{"internal/ports/inbound", "internal/domain"}, forbidStd: std("database/sql")},
@@ -115,7 +151,8 @@ func ruleFor(rel string) *rule {
 // pkgInfo is what go list says about one package that is imported somewhere.
 type pkgInfo struct {
 	Standard bool
-	Main     bool // belongs to the main module
+	Main     bool     // belongs to the main module
+	Imports  []string // direct production imports, as go list reports them
 }
 
 // classifier maps an import path to go list's classification of it.
@@ -124,6 +161,16 @@ type classifier map[string]pkgInfo
 // violations returns every rule that the package (module-relative path and
 // import path) breaks by importing imports.
 func (c classifier) violations(rel, importPath string, imports []string) []string {
+	return c.check(rel, importPath, imports, false)
+}
+
+// testViolations is violations for the imports of test files. Families in
+// forbidStdProd are allowed there.
+func (c classifier) testViolations(rel, importPath string, imports []string) []string {
+	return c.check(rel, importPath, imports, true)
+}
+
+func (c classifier) check(rel, importPath string, imports []string, isTest bool) []string {
 	if under(rel, "tests") {
 		return nil // tests may reach any package
 	}
@@ -132,6 +179,11 @@ func (c classifier) violations(rel, importPath string, imports []string) []strin
 		return []string{fmt.Sprintf("%s matches no architecture rule. Add one to deps_test.go", rel)}
 	}
 	var out []string
+	if !isTest && under(rel, "internal/domain") && rel != "internal/domain" {
+		if _, ok := domainOrder[domainPkg(rel)]; !ok {
+			out = append(out, fmt.Sprintf("%s has no entry in the domain dependency order table (structure.md 5.6). Add it to domainOrder", rel))
+		}
+	}
 	for _, imp := range imports {
 		if imp == importPath {
 			continue // an external test package imports the package under test
@@ -141,13 +193,33 @@ func (c classifier) violations(rel, importPath string, imports []string) []strin
 		case !known:
 			out = append(out, fmt.Sprintf("%s imports %s, which go list does not report (cgo or an unresolved import)", rel, imp))
 		case info.Standard:
+			exempt := false
+			for _, e := range r.exceptStd {
+				if under(imp, e) {
+					exempt = true
+				}
+			}
+			if exempt {
+				break
+			}
 			for _, f := range r.forbidStd {
 				if under(imp, f) {
 					out = append(out, fmt.Sprintf("%s must not import %s (forbidden family %s)", rel, imp, f))
 				}
 			}
+			if !isTest {
+				for _, f := range r.forbidStdProd {
+					if under(imp, f) {
+						out = append(out, fmt.Sprintf("%s must not import %s in production code (forbidden family %s)", rel, imp, f))
+					}
+				}
+			}
 		case info.Main:
 			target := strings.TrimPrefix(imp, module+"/")
+			if under(rel, "internal/domain") && under(target, "internal/domain") {
+				out = append(out, domainOrderViolations(rel, target)...)
+				continue
+			}
 			ok := false
 			for _, allowed := range r.internal {
 				if under(target, allowed) {
@@ -174,6 +246,82 @@ func (c classifier) violations(rel, importPath string, imports []string) []strin
 		}
 	}
 	return out
+}
+
+// domainTransitiveBan lists the standard library families that no domain
+// package may reach, directly or through any chain of imports: the network
+// (except net/netip), TLS, randomness, process execution and plugins. A direct
+// import is already refused by the rules above. This closes the indirect
+// route, for example a domain package that imports another package that
+// imports net/smtp. os, time and syscall are not listed because fmt and os
+// import them for everyone. The scope package refuses them by direct import.
+var domainTransitiveBan = []string{"net", "crypto/tls", "crypto/rand", "math/rand", "os/exec", "plugin"}
+
+// domainTransitiveExcept are exceptions to domainTransitiveBan.
+var domainTransitiveExcept = []string{"net/netip"}
+
+func transitivelyBanned(path string) bool {
+	for _, e := range domainTransitiveExcept {
+		if under(path, e) {
+			return false
+		}
+	}
+	for _, f := range domainTransitiveBan {
+		if under(path, f) {
+			return true
+		}
+	}
+	return false
+}
+
+// transitiveViolations walks the import graph from start and reports every
+// reachable package that is banned, with the chain that reaches it.
+func (c classifier) transitiveViolations(rel string, start []string) []string {
+	parent := map[string]string{}
+	queue := append([]string{}, start...)
+	for _, s := range start {
+		parent[s] = ""
+	}
+	var out []string
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if transitivelyBanned(cur) {
+			chain := []string{cur}
+			for p := parent[cur]; p != ""; p = parent[p] {
+				chain = append([]string{p}, chain...)
+			}
+			out = append(out, fmt.Sprintf("%s reaches %s through %s", rel, cur, strings.Join(chain, " -> ")))
+			continue
+		}
+		for _, next := range c[cur].Imports {
+			if _, seen := parent[next]; !seen {
+				parent[next] = cur
+				queue = append(queue, next)
+			}
+		}
+	}
+	return out
+}
+
+// domainPkg returns the first path element below internal/domain.
+func domainPkg(rel string) string {
+	parts := strings.Split(strings.TrimPrefix(rel, "internal/domain/"), "/")
+	return parts[0]
+}
+
+// domainOrderViolations checks one domain-to-domain import against domainOrder.
+func domainOrderViolations(rel, target string) []string {
+	src, dst := domainPkg(rel), domainPkg(target)
+	if src == dst {
+		return nil
+	}
+	for _, allowed := range domainOrder[src] {
+		if dst == allowed {
+			return nil
+		}
+	}
+	return []string{fmt.Sprintf("domain package %s must not import domain package %s (structure.md 5.6 order table)", src, dst)}
 }
 
 // processCreationUses reports calls to os.StartProcess and to the syscall
@@ -237,13 +385,17 @@ func fakeList() classifier {
 	c := classifier{}
 	for _, p := range []string{
 		"context", "errors", "log/slog", "net/http", "net/http/httputil", "net/http/httptest", "net/http/cgi",
-		"net/httpx", // not a real package: proves a family match needs a path boundary
+		"netx", // not a real package: proves a family match needs a path boundary
 		"database/sql", "database/sql/driver", "os", "os/exec", "os/signal", "syscall", "plugin", "unsafe", "time",
+		"net", "net/netip", "io/fs", "path/filepath", "log", "strings", "strconv", "sort", "fmt", "unicode/utf8", "slices",
+		"net/smtp", "net/rpc", "net/url", "net/textproto", "net/mail", "net/rpc/jsonrpc", "crypto/tls", "crypto/rand", "crypto/sha256",
+		"math/rand", "math/rand/v2", "math", "reflect", "runtime", "internal/netip",
 	} {
 		c[p] = pkgInfo{Standard: true}
 	}
 	for _, p := range []string{
-		"internal/domain/scope", "internal/application/health", "internal/application/other", "internal/ports/inbound",
+		"internal/domain/scope", "internal/domain/target", "internal/domain/operation", "internal/domain/approval", "internal/domain/assessment",
+		"internal/domain/job", "internal/domain/actor", "internal/domain/unlisted", "internal/application/health", "internal/application/other", "internal/ports/inbound",
 		"internal/ports/outbound", "internal/adapters/inbound/http/router", "internal/adapters/inbound/http/handlers",
 		"internal/adapters/outbound/persistence", "internal/infrastructure/logging", "internal/platform/linux",
 		"internal/bootstrap", "internal/config",
@@ -270,8 +422,8 @@ func TestRuleEngineDetectsViolations(t *testing.T) {
 	}{
 		{"domain imports gin", "internal/domain/scope", []string{"github.com/gin-gonic/gin"}, "third-party"},
 		{"domain imports net/http", "internal/domain/scope", []string{"net/http"}, "net/http"},
-		{"domain imports a nested net/http package", "internal/domain/scope", []string{"net/http/httputil"}, "family net/http"},
-		{"domain imports net/http/cgi", "internal/domain/scope", []string{"net/http/cgi"}, "family net/http"},
+		{"domain imports a nested net/http package", "internal/domain/scope", []string{"net/http/httputil"}, "family net"},
+		{"domain imports net/http/cgi", "internal/domain/scope", []string{"net/http/cgi"}, "family net"},
 		{"domain imports database/sql/driver", "internal/domain/scope", []string{"database/sql/driver"}, "family database/sql"},
 		{"domain imports application", "internal/domain/scope", []string{m + "internal/application/health"}, "internal/application/health"},
 		{"domain imports ports", "internal/domain/scope", []string{m + "internal/ports/inbound"}, "internal/ports/inbound"},
@@ -340,7 +492,7 @@ func TestRuleEngineAllowsTheDocumentedDirections(t *testing.T) {
 		{"bootstrap composes everything", "internal/bootstrap", []string{m + "internal/application/health", m + "internal/adapters/inbound/http/router", m + "internal/config", m + "internal/infrastructure/logging", "net/http"}},
 		{"cmd uses bootstrap, config and syscall for signal numbers", "cmd/server", []string{m + "internal/bootstrap", m + "internal/config", "os/signal", "syscall"}},
 		{"an external test package imports its own package", "internal/application/health", []string{m + "internal/application/health"}},
-		{"a package whose name only looks like a forbidden family", "internal/domain/scope", []string{"net/httpx"}},
+		{"a package whose name only looks like a forbidden family", "internal/domain/scope", []string{"netx"}},
 		{"unsafe is standard library", "internal/domain/scope", []string{"unsafe"}},
 		{"architecture tests reach everything", "tests/architecture", []string{"os/exec", m + "internal/domain/scope", "github.com/some/library"}},
 	}
@@ -438,7 +590,7 @@ func listModule(t *testing.T, goos, goarch string) ([]listedPackage, classifier)
 		if strings.Contains(path, " [") || strings.HasSuffix(path, ".test") {
 			continue
 		}
-		info := pkgInfo{Standard: p.Standard}
+		info := pkgInfo{Standard: p.Standard, Imports: p.Imports}
 		if p.Module != nil {
 			info.Main = p.Module.Main
 		}
@@ -462,8 +614,9 @@ func TestModuleHonoursTheDependencyDirections(t *testing.T) {
 			var all []string
 			for _, p := range own {
 				rel := strings.TrimPrefix(p.ImportPath, module+"/")
-				imports := append(append(append([]string{}, p.Imports...), p.TestImports...), p.XTestImports...)
-				all = append(all, c.violations(rel, p.ImportPath, imports)...)
+				testImports := append(append([]string{}, p.TestImports...), p.XTestImports...)
+				all = append(all, c.violations(rel, p.ImportPath, p.Imports)...)
+				all = append(all, c.testViolations(rel, p.ImportPath, testImports)...)
 			}
 			sort.Strings(all)
 			for _, v := range all {
@@ -532,5 +685,187 @@ func TestNoSourceEscapesTheCheckedPlatforms(t *testing.T) {
 	sort.Strings(files)
 	for _, f := range files {
 		t.Errorf("%s is excluded on every checked platform and is not inspected. The architecture defines only %v (structure.md section 3). Remove the file or add its platform to `platforms` after an approved decision", f, platforms)
+	}
+}
+
+func TestDomainRules(t *testing.T) {
+	const m = module + "/"
+	c := fakeList()
+	detect := []struct {
+		name, rel string
+		imports   []string
+		want      string
+	}{
+		{"scope resolves names", "internal/domain/scope", []string{"net"}, "forbidden family net"},
+		{"another domain package resolves names", "internal/domain/job", []string{"net"}, "forbidden family net"},
+		{"scope reads the clock", "internal/domain/scope", []string{"time"}, "family time"},
+		{"scope reads files", "internal/domain/scope", []string{"os"}, "family os"},
+		{"scope uses os/signal", "internal/domain/scope", []string{"os/signal"}, "family os"},
+		{"scope uses io/fs", "internal/domain/scope", []string{"io/fs"}, "family io/fs"},
+		{"scope uses path/filepath", "internal/domain/scope", []string{"path/filepath"}, "family path/filepath"},
+		{"scope logs", "internal/domain/scope", []string{"log"}, "family log"},
+		{"scope imports an unrelated domain package", "internal/domain/scope", []string{m + "internal/domain/assessment"}, "must not import domain package assessment"},
+		{"scope imports the job package", "internal/domain/scope", []string{m + "internal/domain/job"}, "must not import domain package job"},
+		{"target imports scope (reverse direction)", "internal/domain/target", []string{m + "internal/domain/scope"}, "must not import domain package scope"},
+		{"operation imports anything", "internal/domain/operation", []string{m + "internal/domain/actor"}, "must not import domain package actor"},
+		{"domain package missing from the table", "internal/domain/unlisted", nil, "no entry in the domain dependency order table"},
+		{"domain package missing from the table, with imports", "internal/domain/unlisted", []string{"errors"}, "no entry in the domain dependency order table"},
+		{"domain imports a port", "internal/domain/scope", []string{m + "internal/ports/inbound"}, "internal/ports/inbound"},
+	}
+	for _, tc := range detect {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Join(c.violations(tc.rel, module+"/"+tc.rel, tc.imports), "; ")
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("violations = %q, want one containing %q", got, tc.want)
+			}
+		})
+	}
+
+	allow := []struct {
+		name, rel string
+		imports   []string
+	}{
+		{"scope uses pure value types and the standard library", "internal/domain/scope", []string{"net/netip", "errors", "strings", "strconv", "sort", "fmt", "unicode/utf8", "slices"}},
+		{"scope imports the domain packages of the order table", "internal/domain/scope", []string{m + "internal/domain/target", m + "internal/domain/operation", m + "internal/domain/approval"}},
+		{"job imports its table entries and may use the clock", "internal/domain/job", []string{m + "internal/domain/assessment", m + "internal/domain/operation", m + "internal/domain/approval", m + "internal/domain/actor", "time"}},
+		{"a package imports itself (external test package)", "internal/domain/scope", []string{m + "internal/domain/scope"}},
+		{"a sub-package imports its own domain package", "internal/domain/scope/sub", []string{m + "internal/domain/scope"}},
+	}
+	for _, tc := range allow {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := c.violations(tc.rel, module+"/"+tc.rel, tc.imports); len(got) != 0 {
+				t.Errorf("unexpected violations: %v", got)
+			}
+		})
+	}
+}
+
+// TestDomainPackagesExist is Task 1.1 of the plan: the scope domain package is
+// part of the module and is being checked.
+func TestDomainPackagesExist(t *testing.T) {
+	own, _ := listModule(t, platforms[0].goos, platforms[0].goarch)
+	for _, want := range []string{"internal/domain/scope"} {
+		found := false
+		for _, p := range own {
+			// A directory with only test files is not a package of the product.
+			found = found || (strings.TrimPrefix(p.ImportPath, module+"/") == want && len(p.GoFiles) > 0)
+		}
+		if !found {
+			t.Errorf("package %s has no non-test Go file", want)
+		}
+	}
+}
+
+// F-7 of the M1 review and the owner's decision: the scope engine may use
+// net/netip and nothing else from the net family, no TLS, no randomness.
+func TestScopePackageUsesOnlyNetNetip(t *testing.T) {
+	const m = module + "/"
+	c := fakeList()
+	forbidden := []string{
+		"net", "net/http", "net/http/httputil", "net/smtp", "net/rpc", "net/rpc/jsonrpc", "net/url", "net/textproto", "net/mail",
+		"crypto/tls", "crypto/rand", "math/rand", "math/rand/v2", "os", "os/exec", "os/signal", "time", "io/fs", "path/filepath", "log", "syscall", "plugin",
+	}
+	for _, rel := range []string{"internal/domain/scope", "internal/domain/scope/sub", "internal/domain/scope/deep/er"} {
+		for _, imp := range forbidden {
+			if got := c.violations(rel, m+rel, []string{imp}); len(got) == 0 {
+				t.Errorf("%s importing %s was not refused", rel, imp)
+			}
+		}
+		for _, imp := range []string{"net/netip", "errors", "fmt", "sort", "strconv", "strings", "unicode/utf8", "slices", "math", "crypto/sha256"} {
+			if got := c.violations(rel, m+rel, []string{imp}); len(got) != 0 {
+				t.Errorf("%s importing %s was refused: %v", rel, imp, got)
+			}
+		}
+	}
+	// math/rand is out of the production code only. Seeded tests may use math/rand/v2.
+	for _, imp := range []string{"math/rand", "math/rand/v2"} {
+		if got := c.violations("internal/domain/scope", m+"internal/domain/scope", []string{imp}); len(got) == 0 {
+			t.Errorf("production import of %s was not refused", imp)
+		}
+		if got := c.testViolations("internal/domain/scope", m+"internal/domain/scope", []string{imp}); len(got) != 0 {
+			t.Errorf("test import of %s was refused: %v", imp, got)
+		}
+	}
+	// Everything else stays refused in tests.
+	for _, imp := range []string{"net", "net/smtp", "crypto/rand", "crypto/tls", "os", "time"} {
+		if got := c.testViolations("internal/domain/scope", m+"internal/domain/scope", []string{imp}); len(got) == 0 {
+			t.Errorf("test import of %s was not refused", imp)
+		}
+	}
+	// The same family rule applies to every domain package, with the same exception.
+	if got := c.violations("internal/domain/job", m+"internal/domain/job", []string{"net/smtp"}); len(got) == 0 {
+		t.Error("job importing net/smtp was not refused")
+	}
+	if got := c.violations("internal/domain/job", m+"internal/domain/job", []string{"net/netip"}); len(got) != 0 {
+		t.Errorf("job importing net/netip was refused: %v", got)
+	}
+}
+
+// The indirect route: scope imports an allowed domain package that imports the
+// network. The direct rules cannot see it, so the transitive check must.
+func TestTransitiveCheckFindsIndirectNetworkAndRandomness(t *testing.T) {
+	const m = module + "/"
+	graph := func(edges map[string][]string) classifier {
+		c := fakeList()
+		for path, imports := range edges {
+			info := c[path]
+			info.Imports = imports
+			c[path] = info
+		}
+		return c
+	}
+	target, approval, operation := m+"internal/domain/target", m+"internal/domain/approval", m+"internal/domain/operation"
+	cases := []struct {
+		name  string
+		edges map[string][]string
+		start []string
+		want  string // substring of the violation, empty for none
+	}{
+		{"direct network import of an allowed package", map[string][]string{target: {"net/smtp"}}, []string{target}, "net/smtp"},
+		{"two steps down", map[string][]string{target: {approval}, approval: {"crypto/tls"}}, []string{target}, "target -> " + approval + " -> crypto/tls"},
+		{"three steps down", map[string][]string{target: {approval}, approval: {operation}, operation: {"math/rand"}}, []string{target}, "math/rand"},
+		{"randomness", map[string][]string{target: {"crypto/rand"}}, []string{target}, "crypto/rand"},
+		{"plugin", map[string][]string{target: {"plugin"}}, []string{target}, "plugin"},
+		{"process execution", map[string][]string{target: {"os/exec"}}, []string{target}, "os/exec"},
+		{"net/http is part of the net family", map[string][]string{target: {"net/http"}}, []string{target}, "net/http"},
+		{"net/netip is the exception", map[string][]string{target: {"net/netip"}}, []string{target}, ""},
+		{"a cycle terminates", map[string][]string{target: {approval}, approval: {target, "strings"}}, []string{target}, ""},
+		{"nothing banned", map[string][]string{target: {"strings", "fmt"}}, []string{target}, ""},
+		{"a start that is itself banned", map[string][]string{}, []string{"net/smtp"}, "net/smtp"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Join(graph(tc.edges).transitiveViolations("internal/domain/scope", tc.start), "; ")
+			if tc.want == "" && got != "" {
+				t.Errorf("unexpected violations: %s", got)
+			}
+			if tc.want != "" && !strings.Contains(got, tc.want) {
+				t.Errorf("violations = %q, want one containing %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// The real import graph of every domain package, through the whole standard
+// library, reaches none of the banned packages.
+func TestDomainPackagesReachNoNetworkOrRandomness(t *testing.T) {
+	for _, pf := range platforms {
+		t.Run(pf.goos+"_"+pf.goarch, func(t *testing.T) {
+			own, c := listModule(t, pf.goos, pf.goarch)
+			checked := 0
+			for _, p := range own {
+				rel := strings.TrimPrefix(p.ImportPath, module+"/")
+				if !under(rel, "internal/domain") {
+					continue
+				}
+				checked++
+				for _, v := range c.transitiveViolations(rel, p.Imports) {
+					t.Error(v)
+				}
+			}
+			if checked == 0 {
+				t.Error("no domain package was checked")
+			}
+		})
 	}
 }

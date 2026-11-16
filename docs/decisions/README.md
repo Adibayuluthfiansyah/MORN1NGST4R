@@ -1,6 +1,6 @@
 # Decision records
 
-This folder holds the owner decision records and their index. The decision register itself (D-, P- and O- identifiers with their status) is in `.kiro/steering/architecture.md` section 19. Identifiers are never reused or renumbered. D-86 is defined in record 0004 and is also entered in the register.
+This folder holds the owner decision records and their index. The decision register itself (D-, P- and O- identifiers with their status) is in `.kiro/steering/architecture.md` section 19. Identifiers are never reused or renumbered. D-86 and later are defined in records 0004 and 0005 and are also entered in the register.
 
 | Record | Round | IDs | What it decides |
 | --- | --- | --- | --- |
@@ -8,6 +8,7 @@ This folder holds the owner decision records and their index. The decision regis
 | `0002-foundation-completion-decisions.md` | 5 | D-47 to D-62 | Conservative resolutions of the Round 4 findings, authentication and validation options, technology baseline |
 | `0003-foundation-closure-decisions.md` | 6 | D-63 to D-85 | Approval of `security.md` and S1, interpretive choices 1 to 14, technology and provisioning, authentication bootstrap and recovery, sandbox limits, accepted residual risks, plan and PRD reconciliation, repository hygiene |
 | `0004-health-endpoints-mvp-decision.md` | After 6 | D-86 | Health and readiness endpoints are in the MVP and supersede D-80 for health. Metrics stay post-MVP |
+| `0005-m1-scope-engine-closure-decisions.md` | After 6 | D-87 to D-91 | M1 closure: absolute CIDR minimum floor, SIIT range refused, readiness never rests on a scope decision alone, CIDR minimum policy versions and revalidation, matched rule identifier deadline |
 | `pending/` | | | Proposals, and records of proposals that were applied. A proposal there is not in force. |
 
 ## Source-of-truth hierarchy (D-63)

@@ -52,7 +52,7 @@ o_rows = [(m.group(1), l) for l in rows for m in [re.match(r'\| (O-\d+) \|', l)]
 o_ids = [o for o, _ in o_rows]
 check('D ids unique', len(d_ids) == len(set(d_ids)), str([x for x in d_ids if d_ids.count(x) > 1]))
 check('D ids contiguous 1..%d' % len(d_ids), sorted(int(x[2:]) for x in d_ids) == list(range(1, len(d_ids) + 1)))
-check('D-86 is the last decision', max(int(x[2:]) for x in d_ids) == 86)
+check('D-91 is the last decision', max(int(x[2:]) for x in d_ids) == 91)
 check('P ids unique', len(p_ids) == len(set(p_ids)), str([x for x in p_ids if p_ids.count(x) > 1]))
 check('P ids cover 1..64', set(int(x[2:]) for x in p_ids) == set(range(1, 65)))
 check('O ids unique', len(o_ids) == len(set(o_ids)), str([x for x in o_ids if o_ids.count(x) > 1]))
@@ -70,8 +70,8 @@ check('every other O item is in the Resolved table', all(('| %s |' % ('O-%02d' %
 DOCS = ['.kiro/steering/security.md', '.kiro/steering/product.md', '.kiro/steering/structure.md', '.kiro/steering/tech.md',
         '.kiro/steering/architecture.md', '.kiro/specs/mvp/plan.md', 'docs/PRD.md', 'docs/security/threat-model.md',
         'docs/decisions/README.md', 'docs/decisions/0001-owner-security-decisions-round-2.md',
-        'docs/decisions/0002-foundation-completion-decisions.md', 'docs/decisions/0003-foundation-closure-decisions.md', 'docs/decisions/0004-health-endpoints-mvp-decision.md', 'README.md']
-# Decision records after 0003 (D-86 onward) define their own identifiers. The register in architecture.md must list them too.
+        'docs/decisions/0002-foundation-completion-decisions.md', 'docs/decisions/0003-foundation-closure-decisions.md', 'docs/decisions/0004-health-endpoints-mvp-decision.md', 'docs/decisions/0005-m1-scope-engine-closure-decisions.md', 'README.md']
+# Decision records after 0003 (D-86 onward, records 0004 and 0005) define their own identifiers. The register in architecture.md must list them too.
 later_d = []
 for f in sorted(os.listdir('docs/decisions')):
     if re.match(r'000[4-9]-.*\.md$', f) or re.match(r'00[1-9]\d-.*\.md$', f):
@@ -207,7 +207,7 @@ check('PRD roadmap lists the same milestones as the plan', prd_ms == set(mrows),
 check('M1 does not depend on tool execution', mrows['M1'][0] == ['M0'])
 
 # ---------------------------------------------------------------- 5. text hygiene
-NEW_DOCS = ['docs/PRD.md', 'docs/decisions/0003-foundation-closure-decisions.md', 'docs/decisions/0004-health-endpoints-mvp-decision.md', 'docs/decisions/README.md', 'README.md']
+NEW_DOCS = ['docs/PRD.md', 'docs/decisions/0003-foundation-closure-decisions.md', 'docs/decisions/0004-health-endpoints-mvp-decision.md', 'docs/decisions/0005-m1-scope-engine-closure-decisions.md', 'docs/decisions/README.md', 'README.md']
 for d in NEW_DOCS:
     txt = read(d).replace('`OPEN — OWNER DECISION REQUIRED`', '')
     check('no em dash in ' + d, '—' not in txt)

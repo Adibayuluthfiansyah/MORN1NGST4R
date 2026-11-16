@@ -7,14 +7,14 @@
 | Product | MORN1NGST4R (canonical technical name `morningstar`) |
 | Document | Product Requirements Document |
 | Version | 0.2 |
-| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. Nothing is implemented except the Phase 1 scaffold. |
+| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold and the M1 scope package. |
 | Last updated | 2026-11-16 |
-| Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
+| Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. The M1 scope package (`services/core/internal/domain/scope`) implements the parsing and evaluation core of FR-SCOPE-001 and FR-SCOPE-002 for names and literals. Nothing uses it yet, so neither requirement is met end to end. No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
 | Owner | The project owner (single decision authority) |
 
 **Source documents.** Listed in precedence order (the order this document follows when sources differ).
 
-1. Owner decisions: `docs/decisions/0001-owner-security-decisions-round-2.md`, `docs/decisions/0002-foundation-completion-decisions.md`, `docs/decisions/0003-foundation-closure-decisions.md`, `docs/decisions/0004-health-endpoints-mvp-decision.md` (D-86), and the decision register in `.kiro/steering/architecture.md` section 19 (D-01 to D-85).
+1. Owner decisions: `docs/decisions/0001-owner-security-decisions-round-2.md`, `docs/decisions/0002-foundation-completion-decisions.md`, `docs/decisions/0003-foundation-closure-decisions.md`, `docs/decisions/0004-health-endpoints-mvp-decision.md` (D-86), `docs/decisions/0005-m1-scope-engine-closure-decisions.md` (D-87 to D-91), and the decision register in `.kiro/steering/architecture.md` section 19 (D-01 to D-85).
 2. Product steering: `.kiro/steering/product.md`.
 3. Steering: `.kiro/steering/architecture.md`, `security.md`, `structure.md`.
 4. Technology: `.kiro/steering/tech.md` and `docs/development/tech-verification/`.
@@ -223,11 +223,11 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Requirement:** The system shall accept scope rules of four kinds only (domain, wildcard, IP, CIDR), each as in-scope or exclusion, store the canonical form with the original, and refuse every other construct.
 - **User value:** Scope is unambiguous and cannot be widened by odd syntax.
 - **Priority:** Must
-- **Acceptance criteria:** AC1 A wildcard inclusion such as `*.example.com` is refused (D-73), while a wildcard exclusion is accepted. AC2 Numeric hosts `127.1`, `2130706433`, `0x7f.0.0.1`, `0177.0.0.1`, `127.000.000.001`, `1.2.3.256`, `1.2.3.4.5` and `foo.0x7f` are refused as ambiguous. AC3 `Example.COM.` is stored as `example.com`, while `example.com..` and `.` are refused. AC4 Ports `0`, `65536`, `08080` and `80,80` are refused. AC5 An in-scope CIDR such as `198.51.0.0/16`, `0.0.0.0/0`, `10/8` or `203.0.113.5/24` is refused, while `203.0.113.0/24` is accepted and a `/16` exclusion is accepted. AC6 A path, regular expression or scheme in a rule value is refused. AC7 A refused exclusion is never dropped silently: the assessment is not ready until a human acknowledges it or replaces it with a supported exclusion that denies at least as much.
+- **Acceptance criteria:** AC1 A wildcard inclusion such as `*.example.com` is refused (D-73), while a wildcard exclusion is accepted. AC2 Numeric hosts `127.1`, `2130706433`, `0x7f.0.0.1`, `0177.0.0.1`, `127.000.000.001`, `1.2.3.256`, `1.2.3.4.5` and `foo.0x7f` are refused as ambiguous. AC3 `Example.COM.` is stored as `example.com`, while `example.com..` and `.` are refused. AC4 Ports `0`, `65536`, `08080` and `80,80` are refused. AC5 An in-scope CIDR such as `198.51.0.0/16`, `0.0.0.0/0`, `10/8` or `203.0.113.5/24` is refused, while `203.0.113.0/24` is accepted and a `/16` exclusion is accepted. AC6 A path, regular expression or scheme in a rule value is refused. AC7 A refused exclusion is never dropped silently: the assessment is not ready until a human acknowledges it or replaces it with a supported exclusion that denies at least as much. AC8 The embedded-IPv4 ranges (`::/96` with `::1`, `::ffff:0:0:0/96`, `64:ff9b::/96`, `64:ff9b:1::/48`, `2002::/16`, `2001::/32`) are refused as literals, and an in-scope prefix that overlaps one is refused (D-88). AC9 An in-scope CIDR minimum is never shorter than /24 (IPv4) or /48 (IPv6), whatever the policy value (D-87).
 - **Dependencies:** none for names and literals. Host conversion is FR-SCOPE-007.
 - **Security:** Parsing differences are a scope bypass (T-01 to T-04).
-- **MVP status:** Planned (M1 core, M16 registration use case).
-- **Source:** Decided. D-34 to D-38, D-57, D-64 (choices 1, 6 and 10), S1.1, `SEC 2`.
+- **MVP status:** M1 core implemented for names and literals (record 0005). Planned: M16 registration use case, M1b host conversion.
+- **Source:** Decided. D-34 to D-38, D-57, D-64 (choices 1, 6 and 10), D-87, D-88, S1.1, `SEC 2`.
 
 #### FR-SCOPE-002 Deterministic scope evaluation
 - **Requirement:** The system shall evaluate a target against the rule set deterministically: exclusions first, then in-scope rules, with default deny, and shall deny any ambiguous or zero-value target.
@@ -236,8 +236,8 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 An exclusion with no port denies every port, including a port an in-scope rule lists. AC2 An in-scope rule with no port allows only 80 and 443. AC3 An exclusion `*.x.example.com` does not cover `x.example.com`, and a wildcard exclusion covers `a.b.x.example.com`. AC4 For any rule set, adding an exclusion never turns a denial into an allow. AC5 Normalizing a host or prefix twice gives the same result. AC6 A zero-value target is denied.
 - **Dependencies:** FR-SCOPE-001.
 - **Security:** Hostname exclusions do not cover access by IP address. This residual risk is accepted and stated (T-05).
-- **MVP status:** Planned (M1).
-- **Source:** Decided. D-36, D-38, D-57, S1.1; T-01, T-05, T-06.
+- **MVP status:** M1 core implemented (record 0005). `Decision` does not name the deciding rule yet (D-91).
+- **Source:** Decided. D-36, D-38, D-57, D-91, S1.1; T-01, T-05, T-06.
 
 #### FR-SCOPE-003 Resolved-address and redirect evaluation
 - **Requirement:** The system shall evaluate every address a target name resolves to (A, AAAA and CNAME chains), deny the target if any address is denied, connect only to an address that passed, and treat every redirect hop as a new target.
@@ -263,7 +263,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Requirement:** The system shall require, for each assessment, a validation record made of the mechanical scope validation, a stored program-rule reference and a human attestation, bound to the canonical target-set hash and the rules version, before any active operation.
 - **User value:** A recorded, accountable statement of authorization before testing.
 - **Priority:** Must
-- **Acceptance criteria:** AC1 An active operation without a current validation record is denied. AC2 An attestation by an AI actor is refused. AC3 A lab target requires the lab-specific attestation wording. AC4 The record stores actor, time, target-set hash and rules version. AC5 The user interface does not describe the record as proof of ownership.
+- **Acceptance criteria:** AC1 An active operation without a current validation record is denied. AC2 An attestation by an AI actor is refused. AC3 A lab target requires the lab-specific attestation wording. AC4 The record stores actor, time, target-set hash and rules version. AC5 The user interface does not describe the record as proof of ownership. AC6 A target is recorded as allowed only when both the scope decision and the special-address policy allow it, and the result is deny when that policy is unavailable (D-89). AC7 A policy snapshot change makes the record stale (D-90).
 - **Dependencies:** FR-PROG-002, FR-SCOPE-001, FR-AUTH-001.
 - **Security:** The attestation is a statement that supports accountability and does not prevent misuse (T-13). Proof of control is deferred.
 - **MVP status:** Planned (M2 domain, M18 workflow, M24 screen).
@@ -295,7 +295,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Requirement:** The system shall let the researcher create an assessment under a program, move it through defined lifecycle states, and start it only when its validation record is current.
 - **User value:** A structured container for one assessment.
 - **Priority:** Must
-- **Acceptance criteria:** AC1 An assessment cannot start without a current validation record. AC2 An assessment with an unacknowledged refused exclusion is not ready. AC3 State changes are audited.
+- **Acceptance criteria:** AC1 An assessment cannot start without a current validation record. AC2 An assessment with an unacknowledged refused exclusion is not ready. AC3 State changes are audited. AC4 An assessment does not become Ready, start or resume on a scope decision alone, and it fails closed when the special-address policy is unavailable (D-89).
 - **Dependencies:** FR-PROG-001, FR-SCOPE-005.
 - **Security:** Starting an assessment is a policy-relevant action and needs an authenticated human. States are Draft, Ready (current validation record and no unacknowledged refused exclusion), Running, Paused (no new launches, queued jobs held), Completed and Cancelled (D-83).
 - **MVP status:** Planned (M3 schema, M16 records and target set, M21 lifecycle transitions, M24 screens, M15).
@@ -315,7 +315,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Requirement:** The system shall allow policy changes only by an authenticated human through one canonical policy store, shall audit every change with actor, old value, new value, time and reason, and shall require password re-entry for changes that widen what can be tested or sent.
 - **User value:** Policy cannot be altered silently or by automation.
 - **Priority:** Must
-- **Acceptance criteria:** AC1 A change request from an AI, worker or API-token actor is refused and audited. AC2 The audit event contains the old and new value. AC3 A widening change without recent password entry is refused.
+- **Acceptance criteria:** AC1 A change request from an AI, worker or API-token actor is refused and audited. AC2 The audit event contains the old and new value. AC3 A widening change without recent password entry is refused. AC4 The CIDR minimum cannot be set below /24 (IPv4) or /48 (IPv6). Loosening it is a widening change, and every change creates a policy version, makes target authorization validations stale and makes approvals bound to the earlier snapshot unusable (D-87, D-90).
 - **Dependencies:** FR-AUTH-001, FR-AUDIT-001.
 - **Security:** T-20, T-21. Same-user processes remain a residual risk (T-61).
 - **MVP status:** Planned (M2, M4, M5, M16). The store is versioned PostgreSQL tables behind one `PolicyStore` port (D-64 choice 4).
@@ -879,7 +879,7 @@ The plan gaps PM-01 to PM-06 are closed by milestones M16 to M25 (D-83). SM-09 c
 
 ## 3.16 Release Roadmap
 
-The roadmap is `.kiro/specs/mvp/plan.md`. This section only maps requirements to its milestones. Dependencies, gates and readiness conditions are those of the plan. M1 is the only milestone expanded to task level (Tasks 1.1 to 1.5). The Phase 1 scaffold is existing preparatory work and is not a milestone. M1 has not started.
+The roadmap is `.kiro/specs/mvp/plan.md`. This section only maps requirements to its milestones. Dependencies, gates and readiness conditions are those of the plan. M1 is the only milestone expanded to task level (Tasks 1.1 to 1.5). The Phase 1 scaffold is existing preparatory work and is not a milestone. M1 is implemented (record 0005).
 
 | Milestone | Plan deliverable | Requirements |
 | --- | --- | --- |
@@ -942,7 +942,7 @@ The roadmap is `.kiro/specs/mvp/plan.md`. This section only maps requirements to
 
 ### Owner and product decisions
 
-Decisions are closed in `docs/decisions/0003-foundation-closure-decisions.md` (D-63 to D-85) and `docs/decisions/0004-health-endpoints-mvp-decision.md` (D-86). The register is in `architecture.md` section 19. Eight items stay open as gates, and none blocks M1.
+Decisions are closed in `docs/decisions/0003-foundation-closure-decisions.md` (D-63 to D-85) and `docs/decisions/0004-health-endpoints-mvp-decision.md` (D-86) and `docs/decisions/0005-m1-scope-engine-closure-decisions.md` (D-87 to D-91). The register is in `architecture.md` section 19. Eight items stay open as gates, and none blocks M1.
 
 | Item | Gate | Blocks |
 | --- | --- | --- |

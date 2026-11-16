@@ -26,6 +26,7 @@ A path ending in `/` covers everything under it. "Action" says what this round d
 | `docs/decisions/0002-foundation-completion-decisions.md` | A | Public | Owner decision record | None |
 | `docs/decisions/0003-foundation-closure-decisions.md` | A | Public | Owner decision record | Note on the license move in D-74. Supersession pointer for health endpoints in D-80 |
 | `docs/decisions/0004-health-endpoints-mvp-decision.md` | A | Public | Owner decision record D-86: health endpoints in the MVP | New |
+| `docs/decisions/0005-m1-scope-engine-closure-decisions.md` | A | Public | Owner decision record D-87 to D-91: M1 closure (CIDR minimum floor, SIIT, readiness gate, CIDR minimum policy versions, matched rule identifier) | New |
 | `docs/decisions/README.md` | A | Public | Index and source-of-truth hierarchy | None |
 | `docs/decisions/pending/README.md` | A | Public | Status of proposals and applied proposals | None |
 | `docs/decisions/pending/S1-security-semantics.md` | A | Public | Detailed security specification (approved, D-64) | None |
