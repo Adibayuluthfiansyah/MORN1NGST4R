@@ -7,9 +7,9 @@
 | Product | MORN1NGST4R (canonical technical name `morningstar`) |
 | Document | Product Requirements Document |
 | Version | 0.2 |
-| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold, the M1 scope package and the M2 policy and approval domain. |
+| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold, the M1 scope package, the M2 policy and approval domain and the M3 persistence layer (PostgreSQL schema, atomic approval consumption, recovery generation, database readiness probe). |
 | Last updated | 2026-11-16 |
-| Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. The M1 scope package (`services/core/internal/domain/scope`) implements the parsing and evaluation core of FR-SCOPE-001 and FR-SCOPE-002 for names and literals. Nothing uses it yet, so neither requirement is met end to end. The M2 packages (`internal/domain/actor`, `operation`, `approval` and the decision function `scope.Decide`) implement the pure domain part of FR-POLICY-001, FR-APPROVAL-001 to FR-APPROVAL-004 and FR-APPROVAL-006: the approval record and its lifecycle, the consumption state machine, the operation hash, the class derivation and the authorization value. There is no persistence, no use case and no worker, so none of these requirements is met end to end. No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
+| Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. The M1 scope package (`services/core/internal/domain/scope`) implements the parsing and evaluation core of FR-SCOPE-001 and FR-SCOPE-002 for names and literals. Nothing uses it yet, so neither requirement is met end to end. The M2 packages (`internal/domain/actor`, `operation`, `approval` and the decision function `scope.Decide`) implement the pure domain part of FR-POLICY-001, FR-APPROVAL-001 to FR-APPROVAL-004 and FR-APPROVAL-006: the approval record and its lifecycle, the consumption state machine, the operation hash, the class derivation and the authorization value. M3 adds the PostgreSQL schema, the atomic consumption of approval uses and the recovery generation, but no use case and no worker call them yet, so none of these requirements is met end to end. No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
 | Owner | The project owner (single decision authority) |
 
 **Source documents.** Listed in precedence order (the order this document follows when sources differ).
@@ -204,7 +204,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 Creating an assessment without a program is rejected. AC2 A program stores a name and rules text. AC3 Creating and editing a program produces an audit event with the actor.
 - **Dependencies:** FR-AUTH-001, FR-AUDIT-001.
 - **Security:** Program text is untrusted when displayed or sent to a provider (T-42).
-- **MVP status:** Planned (M3 schema, M16 use cases, M24 screens, M15).
+- **MVP status:** M3 schema implemented. Planned (M16 use cases, M24 screens, M15).
 - **Source:** Decided. `P 6` step 1, `P 8`, `SEC 2`, structure.md 5.1.
 
 #### FR-PROG-002 Program rules reference and version
@@ -214,7 +214,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 A rules edit creates a new version identifier. AC2 The validation record stores the rules version it was bound to. AC3 A rules edit marks the validation record stale (FR-SCOPE-006).
 - **Dependencies:** FR-PROG-001, FR-SCOPE-005.
 - **Security:** The reference is a statement, not proof of authorization (T-13).
-- **MVP status:** Planned (M2 domain, M3 schema, M16 use cases, M18 validation).
+- **MVP status:** M2 domain and M3 schema implemented. Planned (M16 use cases, M18 validation).
 - **Source:** Decided. D-61, C item 5.
 
 ### Scope
@@ -298,7 +298,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 An assessment cannot start without a current validation record. AC2 An assessment with an unacknowledged refused exclusion is not ready. AC3 State changes are audited. AC4 An assessment does not become Ready, start or resume on a scope decision alone, and it fails closed when the special-address policy is unavailable (D-89).
 - **Dependencies:** FR-PROG-001, FR-SCOPE-005.
 - **Security:** Starting an assessment is a policy-relevant action and needs an authenticated human. States are Draft, Ready (current validation record and no unacknowledged refused exclusion), Running, Paused (no new launches, queued jobs held), Completed and Cancelled (D-83).
-- **MVP status:** Planned (M3 schema, M16 records and target set, M21 lifecycle transitions, M24 screens, M15).
+- **MVP status:** M3 schema implemented. Planned (M16 records and target set, M21 lifecycle transitions, M24 screens, M15).
 - **Source:** Decided requirement. `P 8`, structure.md 5.1 (create, start, pause, complete), D-61, D-83 (states: Draft, Ready, Running, Paused, Completed, Cancelled).
 
 #### FR-POLICY-001 Policy evaluation at enforcement points
@@ -328,7 +328,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 An approval for target A does not authorize target B. AC2 A changed parameter changes the operation hash and invalidates the approval. AC3 An approval created by an AI, worker or API token is refused.
 - **Dependencies:** FR-APPROVAL-004.
 - **Security:** T-16, T-18.
-- **MVP status:** M2 domain part implemented (record, binding, human-only lifecycle). Planned: M3 (schema), M19 (use cases).
+- **MVP status:** M2 domain part and M3 schema implemented (record, binding, human-only lifecycle, decision and terms fixed once decided). Planned: M19 (use cases).
 - **Source:** Decided. D-06, D-30, D-51, `SEC 4`.
 
 #### FR-APPROVAL-002 Approval consumption and attempts
@@ -338,7 +338,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 With two workers claiming one job, exactly one consumption exists for the pair. AC2 A second consumption for the same pair is impossible by database constraint. AC3 A retry claim reuses the original record. AC4 A denial before launch is not counted as an attempt and does not restore the use. AC5 An intrusive job whose lease expires is failed, not retried. AC6 A rerun of an intrusive operation needs a new job and a new approval. AC7 A retry launch does not start before the previous attempt's process tree is confirmed terminated.
 - **Dependencies:** FR-APPROVAL-001, FR-JOB-001.
 - **Security:** T-16, T-17.
-- **MVP status:** M2 domain part implemented (consumption state machine). Planned: M3, M7, M19. Gate G-consume.
+- **MVP status:** M2 domain part and M3 persistence implemented (consumption state machine, atomic consumption in PostgreSQL, G-consume with real concurrent transactions). Planned: M7, M19.
 - **Source:** Decided. D-30, D-49, D-55, D-64 (choice 12), `SEC 4`.
 
 #### FR-APPROVAL-003 Expiry, revocation and running work
@@ -713,7 +713,7 @@ Targets appear only where a decision or evidence supports them.
 | NFR-REL-001 | Reliability | Jobs are persistent and delivered at least once, with idempotent or non-retryable handlers. | Binary | arch section 14, D-03 | M7 |
 | NFR-REL-002 | Reliability | An audit failure stops new operations but not cancellation, revocation or denials. | Binary | `SEC 13` | M5 |
 | NFR-REL-003 | Reliability | Revocation, scope change and lab change stop affected work within 30 seconds, measured on the baseline. | 30 s (objective until measured) | D-48, O-35 | M7 |
-| NFR-REL-004 | Reliability | After a detected database restore, authority recorded in the restored database (sessions, approvals, validations, labs, enablements, queued and running jobs) is revoked or cancelled before any operation runs. The detector is an external marker, not a database flag. Limits: same-user attackers and snapshots that restore the marker are not covered. | Binary (Proposed, DB-28, DQ-17) | `database/recovery-generation.md` | M3, M4 |
+| NFR-REL-004 | Reliability | After a detected database restore, authority recorded in the restored database (sessions, approvals, validations, labs, enablements, queued and running jobs) is revoked or cancelled before any operation runs. The detector is an external marker, not a database flag. Limits: same-user attackers and snapshots that restore the marker are not covered. M3 implements the marker, the startup decision and the reconciliation of the M3 tables (G-recovery passed). The route gating, the recovery page and the tables of later slices are TD-M3-04 to TD-M3-06. | Binary (DB-28, DQ-17) | `database/recovery-generation.md` | M3, M4 |
 | NFR-PERF-001 | Performance | No numeric response-time, throughput or job-latency target is set for the MVP. Performance is measured and recorded, not promised. The only timing requirement is the 30-second stop objective (NFR-REL-003). | No target (decided: none) | D-83 | none |
 | NFR-PERF-002 | Performance | Sandbox start-up overhead is recorded as evidence: about 12 to 22 ms in process on the reference host. This is an observation, not a target. | Not a target | sandbox-spike S14 | M8 |
 | NFR-MAINT-001 | Maintainability | Package dependency directions are enforced by an architecture test, and the repository passes `scripts/validate-foundation.py` before each foundation commit. | Binary | structure.md 5.6, D-23 to D-27, D-84 | M0, M1 |
@@ -721,12 +721,12 @@ Targets appear only where a decision or evidence supports them.
 | NFR-MAINT-003 | Maintainability | Decision identifiers are never reused or renumbered. | Binary | architecture.md how to read | all |
 | NFR-USE-001 | Usability | No numeric usability target is set for the MVP. Every control is keyboard operable and every form field has a label. No accessibility conformance level is claimed. | Binary for the two stated rules | D-83 | M13, M24 |
 | NFR-USE-002 | Usability | The approval and registration screens show a target in both its ASCII and Unicode forms. | Binary | S1.1 | M24 |
-| NFR-RES-001 | Resource efficiency | The application runs on a Linux laptop with 8 GB RAM. Idle PostgreSQL memory, the Next.js server and test-browser sizes are not measured. M3 and M13 record them. No number is invented. | Stated target, measured gate | tech.md 15 (owner statement), D-67 | M3, M13 |
+| NFR-RES-001 | Resource efficiency | The application runs on a Linux laptop with 8 GB RAM. Idle PostgreSQL memory is measured (M3, 2026-11-18, PostgreSQL 18.6 on a 7.7 GB laptop, proportional set size): 7 MB idle, 21 MB with the server connected, 59 MB with 27 of 30 connections. The Next.js server and test-browser sizes are not measured. M13 records them. No number is invented. | Stated target, measured gate | tech.md 15 (owner statement), D-67 | M3, M13 |
 | NFR-OBS-001 | Observability | Structured, redacted logs with request and job identifiers. Library is `log/slog` (D-80). | Binary | arch section 17, `SEC 13` | M5 |
 | NFR-OBS-002 | Observability | Metrics endpoints are post-MVP. Read-only polling is not audited per request. Evidence access and exports are audited. Health endpoints are in NFR-OBS-003. | Binary | D-80, `SEC 13` | M5 |
-| NFR-OBS-003 | Observability | `GET /api/v1/health/live` and `GET /api/v1/health/ready` are part of the MVP. They return fixed, minimal status words, expose no sensitive information, and stay behind the Host allow-list on the loopback-only listener. Readiness confirms process initialization only until readiness probes exist. | Binary | D-86, `SEC 8` | Phase 1 scaffold, M3 |
+| NFR-OBS-003 | Observability | `GET /api/v1/health/live` and `GET /api/v1/health/ready` are part of the MVP. They return fixed, minimal status words, expose no sensitive information, and stay behind the Host allow-list on the loopback-only listener. Readiness confirms that the database answers (the M3 probe). | Binary | D-86, `SEC 8` | Phase 1 scaffold, M3 |
 | NFR-INT-001 | Data integrity | Evidence integrity uses SHA-256 with re-hash on read. | Binary | D-10 | M6 |
-| NFR-INT-002 | Data integrity | Approval consumption and job claim are atomic in one transaction, with a unique (approval, job) constraint. | Binary | D-30, D-55 | M3 |
+| NFR-INT-002 | Data integrity | Approval consumption and job claim are atomic in one transaction, with a unique (approval, job) constraint. Implemented and tested in M3 for the consumption (G-consume). The job claim is M7. | Binary | D-30, D-55 | M3 |
 | NFR-INT-003 | Data integrity | Asset observation history is append-only. | Binary | D-76 | M20 |
 | NFR-PORT-001 | Portability | The MVP targets Linux x86_64 on localhost. The reference host is the only platform tested. Other distributions are NOT TESTED. The supported baseline is defined by capability (P-51, O-22). | Reference host only | D-17, D-19, D-20, tech.md 1 | M8 |
 | NFR-PORT-002 | Portability | Business logic is platform-independent. OS-specific code lives under `platform/`. | Binary | structure.md 5.5, P-21 (adopted, D-80) | M1 |
@@ -735,12 +735,12 @@ Targets appear only where a decision or evidence supports them.
 
 1. Liveness returns 200 with `{"status":"ok"}` on an allowed Host and does not depend on the database, the worker or any other dependency.
 2. Readiness returns 200 with `{"status":"ready"}` when initialization is complete and every registered probe passes, and 503 with `{"status":"not_ready"}` and `Retry-After` otherwise.
-3. Phase 1 readiness has no probe, so it does not claim database readiness. M3 adds the database probe, with a test that a database failure gives 503 `not_ready` while liveness stays 200.
+3. The M3 database probe makes readiness report the database. `TestReadinessFollowsTheDatabase` shows that a stopped database gives 503 `not_ready` while liveness stays 200.
 4. A Host header outside the allow-list gets 403 `host_denied` on every path. The server refuses to bind a non-loopback address.
 5. Another method on a health path gets 405 `method_not_allowed` with an `Allow` header, and an unknown path gets 404 `not_found`, both in the standard error envelope.
 6. No response contains a stack trace, secret, environment value, internal path, version string or dependency detail. A failing probe is logged by its fixed name only.
 7. The health routes are the only routes reachable without a session. Authentication for every other route is FR-AUTH-002 (M4).
-8. Evidence: the automated tests of the Phase 1 scaffold (`services/core` router, bootstrap and architecture tests) for criteria 1, 2 and 4 to 6. Criterion 3 is verified by the M3 test.
+8. Evidence: the automated tests of the Phase 1 scaffold (`services/core` router, bootstrap and architecture tests) for criteria 1, 2 and 4 to 6. Criterion 3 is verified by the M3 test `TestReadinessFollowsTheDatabase` (`services/core/tests/integration/server`).
 
 ## 3.10 Security and Privacy Requirements
 

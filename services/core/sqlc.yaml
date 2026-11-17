@@ -1,0 +1,14 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    # The migrations are the schema. sqlc reads the goose "Up" parts.
+    schema: "migrations"
+    queries: "queries"
+    gen:
+      go:
+        package: "sqlcgen"
+        out: "internal/adapters/outbound/persistence/sqlcgen"
+        sql_package: "pgx/v5"
+        emit_interface: false
+        emit_json_tags: false
+        emit_pointers_for_null_types: true

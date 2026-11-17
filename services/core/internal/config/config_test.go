@@ -11,8 +11,14 @@ import (
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/config"
 )
 
+// load calls config.Load with a home directory, which the database and state
+// defaults need. The tests that cover those defaults call config.Load directly.
+func load(environ []string) (config.Config, error) {
+	return config.Load(append([]string{"HOME=/home/test"}, environ...))
+}
+
 func TestLoadDefaults(t *testing.T) {
-	cfg, err := config.Load(nil)
+	cfg, err := load(nil)
 	if err != nil {
 		t.Fatalf("Load(nil) error: %v", err)
 	}
@@ -36,7 +42,7 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadOverrides(t *testing.T) {
-	cfg, err := config.Load([]string{
+	cfg, err := load([]string{
 		"PATH=/usr/bin", // variables outside the MORNINGSTAR_ prefix are ignored
 		"MORNINGSTAR_HTTP_LISTEN=[::1]:9090",
 		"MORNINGSTAR_LOG_LEVEL=debug",
@@ -58,7 +64,7 @@ func TestLoadOverrides(t *testing.T) {
 }
 
 func TestLoadAllowedHostsAreNormalized(t *testing.T) {
-	cfg, err := config.Load([]string{"MORNINGSTAR_HTTP_ALLOWED_HOSTS= LOCALHOST:8080 ,127.0.0.1:8080,localhost:8080"})
+	cfg, err := load([]string{"MORNINGSTAR_HTTP_ALLOWED_HOSTS= LOCALHOST:8080 ,127.0.0.1:8080,localhost:8080"})
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}
@@ -104,7 +110,7 @@ func TestLoadRefuses(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := config.Load(tc.environ)
+			_, err := load(tc.environ)
 			if err == nil {
 				t.Fatal("Load succeeded, want an error")
 			}
@@ -119,11 +125,11 @@ func TestLoadRefuses(t *testing.T) {
 // knows it only so that one shared environment can serve both processes. It
 // must not change any Go setting.
 func TestLoadIgnoresTheWebOnlyAPIOrigin(t *testing.T) {
-	want, err := config.Load(nil)
+	want, err := load(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := config.Load([]string{"MORNINGSTAR_API_ORIGIN=http://127.0.0.1:9999"})
+	got, err := load([]string{"MORNINGSTAR_API_ORIGIN=http://127.0.0.1:9999"})
 	if err != nil {
 		t.Fatalf("Load refused the web-only MORNINGSTAR_API_ORIGIN: %v", err)
 	}
@@ -135,7 +141,7 @@ func TestLoadIgnoresTheWebOnlyAPIOrigin(t *testing.T) {
 // The Go server does not validate the web value. apps/web owns that rule, so
 // even a value the web side would refuse must not break the Go server.
 func TestLoadDoesNotValidateTheWebOnlyAPIOrigin(t *testing.T) {
-	if _, err := config.Load([]string{"MORNINGSTAR_API_ORIGIN=http://example.com:1"}); err != nil {
+	if _, err := load([]string{"MORNINGSTAR_API_ORIGIN=http://example.com:1"}); err != nil {
 		t.Errorf("Load validated a web-only value: %v", err)
 	}
 }
@@ -147,20 +153,41 @@ func TestLoadStillRefusesNearMissesOfTheWebOnlyName(t *testing.T) {
 		"MORNINGSTAR_WEB_API_ORIGIN", "MORNINGSTAR_NEXT_ANYTHING", "MORNINGSTAR_",
 	} {
 		t.Run(key, func(t *testing.T) {
-			_, err := config.Load([]string{key + "=x"})
+			_, err := load([]string{key + "=x"})
 			if err == nil || !strings.Contains(err.Error(), key) {
 				t.Errorf("Load(%s) error = %v, want an unknown-setting error naming it", key, err)
 			}
 		})
 	}
 	// Case matters: an environment variable name is case sensitive.
-	if _, err := config.Load([]string{"MORNINGSTAR_api_origin=x"}); err == nil {
+	if _, err := load([]string{"MORNINGSTAR_api_origin=x"}); err == nil {
 		t.Error("lower-case variant was accepted, want an unknown-setting error")
 	}
 }
 
+// MORNINGSTAR_PG_BASE belongs to scripts/db/pg-cluster.sh (it moves the whole
+// cluster tree). A developer who exports it for the script must still be able to
+// start the server from the same shell. The server does not read it: the
+// socket directory is MORNINGSTAR_DB_SOCKET_DIR.
+func TestLoadIgnoresTheScriptOnlyPGBase(t *testing.T) {
+	want, err := load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := load([]string{"MORNINGSTAR_PG_BASE=/tmp/elsewhere"})
+	if err != nil {
+		t.Fatalf("Load refused the script-only MORNINGSTAR_PG_BASE: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("MORNINGSTAR_PG_BASE changed the Go configuration:\n got  %+v\n want %+v", got, want)
+	}
+	if _, err := load([]string{"MORNINGSTAR_PG_BASES=x"}); err == nil {
+		t.Error("a near miss of the script name was accepted")
+	}
+}
+
 func TestLoadReportsEveryProblem(t *testing.T) {
-	_, err := config.Load([]string{"MORNINGSTAR_LOG_LEVEL=trace", "MORNINGSTAR_LOG_FORMAT=xml"})
+	_, err := load([]string{"MORNINGSTAR_LOG_LEVEL=trace", "MORNINGSTAR_LOG_FORMAT=xml"})
 	if err == nil {
 		t.Fatal("Load succeeded, want an error")
 	}
@@ -173,7 +200,7 @@ func TestLoadReportsEveryProblem(t *testing.T) {
 
 // A rejected value is quoted so a control character cannot forge a log line.
 func TestLoadQuotesRejectedValues(t *testing.T) {
-	_, err := config.Load([]string{"MORNINGSTAR_LOG_LEVEL=info\nFAKE LOG LINE"})
+	_, err := load([]string{"MORNINGSTAR_LOG_LEVEL=info\nFAKE LOG LINE"})
 	if err == nil {
 		t.Fatal("Load succeeded, want an error")
 	}

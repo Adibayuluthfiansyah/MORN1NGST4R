@@ -13,6 +13,7 @@ This page covers the first implementation phase: the Go server skeleton, the web
 | Dependency-direction test (gate G-arch) | Implemented |
 | `internal/domain/scope` (M1): host, address, prefix and port parsing, rules, `RuleSet.Evaluate`. Standard library only, not called by any other package yet | Implemented |
 | `internal/domain/actor`, `operation`, `approval` and `scope.Decide` (M2): actors, the canonical operation and its hash, approvals with their consumption state machine, the pure decision function and `AuthorizedOperation`. Standard library only, not called by any other package yet | Implemented |
+| PostgreSQL (M3): per-user cluster script, 33 tables in 10 migrations, four login roles, append-only audit table, atomic approval consumption, recovery generation (marker and reconciliation), database readiness probe | Implemented. See the section "Database" below |
 | `apps/web` Next.js App Router shell with a backend status line (5 s request timeout, re-checks every 5 s until the backend is ready) and a same-origin rewrite | Implemented |
 | Redacting `log/slog` logger | Implemented (by key name only) |
 
@@ -20,10 +21,9 @@ This page covers the first implementation phase: the Go server skeleton, the web
 
 | Area | State |
 | --- | --- |
-| Readiness probes | None registered. Readiness only says the process is initialized. The database probe comes with M3 |
 | Authentication, sessions, CSRF, Origin checks | Not implemented (M4). The only routes are the two public health probes |
 | `cmd/worker`, jobs, claiming, tool execution, sandbox, egress | Not created. They wait for G-recovery and G-consume |
-| PostgreSQL, migrations, sqlc, and every domain package except `scope`, `actor`, `operation` and `approval` | Not created (M3 and later) |
+| Domain packages other than `scope`, `actor`, `operation` and `approval`, the tables of the asset, evidence, finding, integration and AI slices (00008 to 00012) | Not created (M6 and later) |
 | OpenAPI generation | Not done. Gate G-openapi has not passed. The health routes are not in `docs/design/api/openapi.yaml` and the web client is hand-written |
 | Nonce Content-Security-Policy, login and bootstrap screens, design system | Not done (M13). Only `frame-ancestors 'none'` and three static headers are set |
 | Tailwind, shadcn/ui, TanStack Query, Zustand, form libraries, ESLint, Playwright | Not installed. They are listed in `tech.md` and enter with the milestone that needs them |
@@ -33,7 +33,7 @@ This page covers the first implementation phase: the Go server skeleton, the web
 - Go 1.27.4 (the recommended release toolchain, `tech.md` section 1). `go.mod` keeps the `go 1.26.0` floor. Builds use `GOTOOLCHAIN=local`, so no other toolchain is downloaded.
 - Node.js 24.x and npm (D-66). `apps/web/package.json` declares `>=24.15.0 <25` and the lockfile installs unchanged with `npm ci`. The reference baseline is Node 24.22.3. Node 26 still runs the code but prints an `EBADENGINE` warning, so treat it as a local experiment until the M13 check.
 - `make`, a C compiler for `go test -race`, and Python 3 for the validators.
-- PostgreSQL is not needed yet.
+- PostgreSQL 18 from your system package manager (`initdb`, `pg_ctl`, `postgres` and `psql` on the PATH). Nothing is downloaded or bundled (D-67). Without it the server still runs, but `/ready` answers 503 and the database tests are skipped.
 
 ## Commands
 
@@ -48,6 +48,10 @@ make run-web       # web dev server on 127.0.0.1:3000
 make build-go      # services/core/bin/server
 make build-web     # next build
 make validate      # the two documentation validators
+make db-up         # first time: create the cluster, start it, create the roles, apply the migrations
+make db-start      # later sessions: start the cluster (make db-stop to stop it)
+make test-db       # the database integration tests (they use a throwaway cluster and fail without PostgreSQL 18)
+make sqlc          # regenerate the typed queries after a change in migrations/ or queries/
 ```
 
 Start the API and the UI in two terminals, then open `http://127.0.0.1:3000`. The page shows "Backend ready" when the browser can reach the API through the Next.js rewrite.
@@ -56,6 +60,22 @@ Start the API and the UI in two terminals, then open `http://127.0.0.1:3000`. Th
 curl -s http://127.0.0.1:8080/api/v1/health/live    # {"status":"ok"}
 curl -s http://127.0.0.1:8080/api/v1/health/ready   # {"status":"ready"}
 ```
+
+## Database
+
+The database is a per-user PostgreSQL 18 cluster under `$XDG_DATA_HOME/morningstar` (default `~/.local/share/morningstar`). It listens on a unix socket only, in a directory with mode 0700, and accepts peer authentication only: the OS user maps to four login roles (`ms_migrator`, `ms_api`, `ms_worker`, `ms_retention`) and there is no password anywhere. The server connects as `ms_api` through `MORNINGSTAR_DB_SOCKET_DIR`. There is no connection string, host, port or password setting, and a `PGPASSWORD`, `PGOPTIONS` or similar variable makes the server refuse to start.
+
+```
+make db-up                                   # once
+make run-server                              # the server runs the recovery check, then serves
+curl -s http://127.0.0.1:8080/api/v1/health/ready   # {"status":"ready"} while the database answers
+```
+
+- The server starts even when the database is down. `/api/v1/health/live` is 200 and `/ready` is 503 until the database answers.
+- On the first start of an empty database the server creates the recovery state and the marker file in `$XDG_STATE_HOME/morningstar` (`recovery-generation.json`, mode 0600, directory mode 0700). The marker lives outside the database on purpose. A database restore is detected by comparing the two (`docs/design/database/recovery-generation.md`). Keep the state directory out of any backup and out of a restore.
+- To start over on purpose, stop the server, delete the database (or the whole cluster directory) and delete the state directory. A fresh database with the old marker is read as a restore and needs the reconciliation, which needs an account.
+- `MORNINGSTAR_PG_BASE` moves the whole cluster tree for the scripts and the tests. The server ignores it.
+- Migrations are forward only. `make db-migrate` runs goose as `ms_migrator`. A development database that applied the later migrations (00013 to 00015) before a slice with a lower number was added needs `goose -allow-missing`. A new database does not.
 
 ## Configuration
 
@@ -88,6 +108,8 @@ One manual run on the reference host (Next.js 16.4.6 with `next start`, API on a
 
 ## Tests
 
+- `services/core/tests/integration/db` and `tests/integration/server` (need PostgreSQL 18, see `make test-db`): migrations, schema against the data dictionary, socket and role provisioning, grant matrix, append-only and column-limiting triggers, G-consume (real concurrent transactions, agreement with the M2 model), G-recovery (a real restore of an older database), the readiness probe against a stopped cluster.
+- `services/core/internal/adapters/outbound/{persistence,recoverymarker}`, `internal/application/recovery`, `internal/platform/posix`: connection settings, marker file (modes, symlinks, concurrent writers), the decision table and the crash-resume paths with injected failures.
 - `services/core/internal/config`: defaults, overrides, 22 refusals (wildcard and LAN listen, IPv4-mapped IPv6, unknown variables, bad hosts, bad levels), and the web-only `MORNINGSTAR_API_ORIGIN` (accepted and ignored, near-miss names still refused).
 - `services/core/internal/infrastructure/logging`: secret-looking keys are redacted, including inside groups. Values are not inspected.
 - `services/core/internal/application/health`: readiness needs every probe, a stuck probe is bounded by the timeout, only the probe name is logged, a panicking probe is an unhealthy result and not a crash, no probe starts once the context is done, and probe goroutines do not accumulate.
