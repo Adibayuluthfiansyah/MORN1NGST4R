@@ -7,9 +7,9 @@
 | Product | MORN1NGST4R (canonical technical name `morningstar`) |
 | Document | Product Requirements Document |
 | Version | 0.2 |
-| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold and the M1 scope package. |
+| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold, the M1 scope package and the M2 policy and approval domain. |
 | Last updated | 2026-11-16 |
-| Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. The M1 scope package (`services/core/internal/domain/scope`) implements the parsing and evaluation core of FR-SCOPE-001 and FR-SCOPE-002 for names and literals. Nothing uses it yet, so neither requirement is met end to end. No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
+| Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. The M1 scope package (`services/core/internal/domain/scope`) implements the parsing and evaluation core of FR-SCOPE-001 and FR-SCOPE-002 for names and literals. Nothing uses it yet, so neither requirement is met end to end. The M2 packages (`internal/domain/actor`, `operation`, `approval` and the decision function `scope.Decide`) implement the pure domain part of FR-POLICY-001, FR-APPROVAL-001 to FR-APPROVAL-004 and FR-APPROVAL-006: the approval record and its lifecycle, the consumption state machine, the operation hash, the class derivation and the authorization value. There is no persistence, no use case and no worker, so none of these requirements is met end to end. No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
 | Owner | The project owner (single decision authority) |
 
 **Source documents.** Listed in precedence order (the order this document follows when sources differ).
@@ -308,7 +308,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 Creating a job for an out-of-scope target is denied and audited. AC2 Narrowing scope after scheduling makes the launch check deny. AC3 An evaluation error returns deny. AC4 A tool launcher given no authorization value refuses to launch.
 - **Dependencies:** FR-SCOPE-002, FR-APPROVAL-001.
 - **Security:** T-14, T-24. The `AuthorizedOperation` mechanism (P-04) is Proposed.
-- **MVP status:** Planned (M2, M7).
+- **MVP status:** M2 domain part implemented (decision function and authorization value). Planned: M7 (the enforcement points in the worker).
 - **Source:** Decided. D-05, D-28, `SEC 3`.
 
 #### FR-POLICY-002 Policy change control
@@ -328,7 +328,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 An approval for target A does not authorize target B. AC2 A changed parameter changes the operation hash and invalidates the approval. AC3 An approval created by an AI, worker or API token is refused.
 - **Dependencies:** FR-APPROVAL-004.
 - **Security:** T-16, T-18.
-- **MVP status:** Planned (M2, M3, M19).
+- **MVP status:** M2 domain part implemented (record, binding, human-only lifecycle). Planned: M3 (schema), M19 (use cases).
 - **Source:** Decided. D-06, D-30, D-51, `SEC 4`.
 
 #### FR-APPROVAL-002 Approval consumption and attempts
@@ -338,7 +338,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 With two workers claiming one job, exactly one consumption exists for the pair. AC2 A second consumption for the same pair is impossible by database constraint. AC3 A retry claim reuses the original record. AC4 A denial before launch is not counted as an attempt and does not restore the use. AC5 An intrusive job whose lease expires is failed, not retried. AC6 A rerun of an intrusive operation needs a new job and a new approval. AC7 A retry launch does not start before the previous attempt's process tree is confirmed terminated.
 - **Dependencies:** FR-APPROVAL-001, FR-JOB-001.
 - **Security:** T-16, T-17.
-- **MVP status:** Planned (M2, M3, M7, M19). Gate G-consume.
+- **MVP status:** M2 domain part implemented (consumption state machine). Planned: M3, M7, M19. Gate G-consume.
 - **Source:** Decided. D-30, D-49, D-55, D-64 (choice 12), `SEC 4`.
 
 #### FR-APPROVAL-003 Expiry, revocation and running work
@@ -348,7 +348,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 An expired approval refuses launch. AC2 A launched operation is killed at its maximum duration. AC3 After revocation, queued jobs are cancelled and running process trees are gone within 30 seconds, measured on the reference host (gate G-revoke).
 - **Dependencies:** FR-JOB-001, FR-TOOL-002.
 - **Security:** T-15.
-- **MVP status:** Conditional. Heartbeat and kill timing are unmeasured (O-35, gate G-revoke). Planned (M7, M19).
+- **MVP status:** Conditional. Heartbeat and kill timing are unmeasured (O-35, gate G-revoke). M2 domain part implemented (expiry, revocation and the running-work rule). Planned: M7, M19.
 - **Source:** Decided requirement. D-48, `SEC 3`, `SEC 4`.
 
 #### FR-APPROVAL-004 Approval classes
@@ -358,7 +358,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 Passive reconnaissance classifies as Passive. AC2 HTTP probing and safe-method replay classify as Low-impact. AC3 State-changing replay and known-vulnerability template checks classify as Intrusive. AC4 An unknown operation is denied. AC5 A class value in an AI proposal has no effect.
 - **Dependencies:** FR-TOOL-001.
 - **Security:** T-22.
-- **MVP status:** Planned (M2, M10).
+- **MVP status:** M2 domain part implemented (class derivation). Planned: M10 (the reviewed tool manifest).
 - **Source:** Decided. D-59, C item 9.
 
 #### FR-APPROVAL-005 Approval interface and re-authentication
@@ -378,7 +378,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 Parallel jobs under one approval never exceed the approved request rate in aggregate. AC2 An active operation with no established numeric limits is blocked.
 - **Dependencies:** FR-APPROVAL-001.
 - **Security:** T-23.
-- **MVP status:** Blocked by the numeric-limit gate (D-71, O-38). Planned (M2, M11).
+- **MVP status:** Blocked by the numeric-limit gate (D-71, O-38). M2 domain part implemented (limits are bound and a missing number blocks). Planned: M11.
 - **Source:** Decided requirement. D-55, D-71.
 
 ### Authentication
@@ -879,7 +879,7 @@ The plan gaps PM-01 to PM-06 are closed by milestones M16 to M25 (D-83). SM-09 c
 
 ## 3.16 Release Roadmap
 
-The roadmap is `.kiro/specs/mvp/plan.md`. This section only maps requirements to its milestones. Dependencies, gates and readiness conditions are those of the plan. M1 is the only milestone expanded to task level (Tasks 1.1 to 1.5). The Phase 1 scaffold is existing preparatory work and is not a milestone. M1 is implemented (record 0005).
+The roadmap is `.kiro/specs/mvp/plan.md`. This section only maps requirements to its milestones. Dependencies, gates and readiness conditions are those of the plan. M1 is the only milestone expanded to task level (Tasks 1.1 to 1.5). The Phase 1 scaffold is existing preparatory work and is not a milestone. M1 (record 0005) and M2 are implemented.
 
 | Milestone | Plan deliverable | Requirements |
 | --- | --- | --- |

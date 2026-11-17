@@ -94,16 +94,25 @@ var domainOrder = map[string][]string{
 	"validation": {"finding", "evidence", "job"},
 }
 
+// strictDomainStd is the forbidden standard library for the domain packages of
+// the policy core. It has no "time": see the comment on the rules below.
+var strictDomainStd = std("net", "database/sql", "os", "io/fs", "path/filepath", "log", "crypto/tls", "crypto/rand", "context")
+
 var rules = []rule{
 	// The domain never resolves names or touches the network, so "net" is out.
 	// Domain-to-domain imports are checked against domainOrder.
 	{prefix: "internal/domain", internal: []string{"internal/domain"}, forbidStd: std("net", "database/sql"), exceptStd: []string{"net/netip"}},
 	// The scope engine is deterministic: no clock, no file system, no environment.
 	// Only net/netip is allowed from the net family. No TLS, no randomness.
-	{prefix: "internal/domain/scope", internal: []string{"internal/domain"},
-		forbidStd:     std("net", "database/sql", "os", "time", "io/fs", "path/filepath", "log", "crypto/tls", "crypto/rand"),
-		exceptStd:     []string{"net/netip"},
-		forbidStdProd: []string{"math/rand"}},
+	// The same group for every domain package that M1 and M2 built: scope,
+	// actor, operation and approval. The time family is allowed (time.Time and
+	// time.Duration are value types the domain needs). Reading the clock is
+	// refused by a source scan instead (domain_rules_test.go), so time always
+	// comes in as an argument.
+	{prefix: "internal/domain/scope", internal: []string{"internal/domain"}, forbidStd: strictDomainStd, exceptStd: []string{"net/netip"}, forbidStdProd: []string{"math/rand"}},
+	{prefix: "internal/domain/actor", internal: []string{"internal/domain"}, forbidStd: strictDomainStd, exceptStd: []string{"net/netip"}, forbidStdProd: []string{"math/rand"}},
+	{prefix: "internal/domain/operation", internal: []string{"internal/domain"}, forbidStd: strictDomainStd, exceptStd: []string{"net/netip"}, forbidStdProd: []string{"math/rand"}},
+	{prefix: "internal/domain/approval", internal: []string{"internal/domain"}, forbidStd: strictDomainStd, exceptStd: []string{"net/netip"}, forbidStdProd: []string{"math/rand"}},
 	{prefix: "internal/application", internal: []string{"internal/domain", "internal/ports"}, forbidStd: std("net/http", "database/sql")},
 	{prefix: "internal/ports", internal: []string{"internal/domain", "internal/ports"}, forbidStd: std("net/http", "database/sql")},
 	{prefix: "internal/adapters/inbound", internal: []string{"internal/ports/inbound", "internal/domain"}, forbidStd: std("database/sql")},
@@ -389,6 +398,7 @@ func fakeList() classifier {
 		"database/sql", "database/sql/driver", "os", "os/exec", "os/signal", "syscall", "plugin", "unsafe", "time",
 		"net", "net/netip", "io/fs", "path/filepath", "log", "strings", "strconv", "sort", "fmt", "unicode/utf8", "slices",
 		"net/smtp", "net/rpc", "net/url", "net/textproto", "net/mail", "net/rpc/jsonrpc", "crypto/tls", "crypto/rand", "crypto/sha256",
+		"encoding/binary",
 		"math/rand", "math/rand/v2", "math", "reflect", "runtime", "internal/netip",
 	} {
 		c[p] = pkgInfo{Standard: true}
@@ -698,7 +708,16 @@ func TestDomainRules(t *testing.T) {
 	}{
 		{"scope resolves names", "internal/domain/scope", []string{"net"}, "forbidden family net"},
 		{"another domain package resolves names", "internal/domain/job", []string{"net"}, "forbidden family net"},
-		{"scope reads the clock", "internal/domain/scope", []string{"time"}, "family time"},
+		{"actor reads files", "internal/domain/actor", []string{"os"}, "family os"},
+		{"operation resolves names", "internal/domain/operation", []string{"net"}, "forbidden family net"},
+		{"approval logs", "internal/domain/approval", []string{"log"}, "family log"},
+		{"approval uses a random source", "internal/domain/approval", []string{"crypto/rand"}, "family crypto/rand"},
+		{"approval reads the clock through context", "internal/domain/approval", []string{"context"}, "family context"},
+		{"scope reads the clock through context", "internal/domain/scope", []string{"context"}, "family context"},
+		{"approval imports scope (reverse direction)", "internal/domain/approval", []string{m + "internal/domain/scope"}, "must not import domain package scope"},
+		{"actor imports operation", "internal/domain/actor", []string{m + "internal/domain/operation"}, "must not import domain package operation"},
+		{"approval imports job (reverse direction)", "internal/domain/approval", []string{m + "internal/domain/job"}, "must not import domain package job"},
+		{"scope imports actor (not in the order table)", "internal/domain/scope", []string{m + "internal/domain/actor"}, "must not import domain package actor"},
 		{"scope reads files", "internal/domain/scope", []string{"os"}, "family os"},
 		{"scope uses os/signal", "internal/domain/scope", []string{"os/signal"}, "family os"},
 		{"scope uses io/fs", "internal/domain/scope", []string{"io/fs"}, "family io/fs"},
@@ -727,6 +746,10 @@ func TestDomainRules(t *testing.T) {
 	}{
 		{"scope uses pure value types and the standard library", "internal/domain/scope", []string{"net/netip", "errors", "strings", "strconv", "sort", "fmt", "unicode/utf8", "slices"}},
 		{"scope imports the domain packages of the order table", "internal/domain/scope", []string{m + "internal/domain/target", m + "internal/domain/operation", m + "internal/domain/approval"}},
+		{"scope may hold time values", "internal/domain/scope", []string{"time", "net/netip", "errors"}},
+		{"approval imports its table entries and holds time values", "internal/domain/approval", []string{m + "internal/domain/operation", m + "internal/domain/actor", "time", "errors", "fmt"}},
+		{"operation hashes with the standard library", "internal/domain/operation", []string{"crypto/sha256", "encoding/binary", "sort", "time", "unicode/utf8", "errors"}},
+		{"actor needs only the standard library", "internal/domain/actor", []string{"errors", "fmt"}},
 		{"job imports its table entries and may use the clock", "internal/domain/job", []string{m + "internal/domain/assessment", m + "internal/domain/operation", m + "internal/domain/approval", m + "internal/domain/actor", "time"}},
 		{"a package imports itself (external test package)", "internal/domain/scope", []string{m + "internal/domain/scope"}},
 		{"a sub-package imports its own domain package", "internal/domain/scope/sub", []string{m + "internal/domain/scope"}},
@@ -744,7 +767,7 @@ func TestDomainRules(t *testing.T) {
 // part of the module and is being checked.
 func TestDomainPackagesExist(t *testing.T) {
 	own, _ := listModule(t, platforms[0].goos, platforms[0].goarch)
-	for _, want := range []string{"internal/domain/scope"} {
+	for _, want := range []string{"internal/domain/scope", "internal/domain/actor", "internal/domain/operation", "internal/domain/approval"} {
 		found := false
 		for _, p := range own {
 			// A directory with only test files is not a package of the product.
@@ -758,20 +781,22 @@ func TestDomainPackagesExist(t *testing.T) {
 
 // F-7 of the M1 review and the owner's decision: the scope engine may use
 // net/netip and nothing else from the net family, no TLS, no randomness.
+// Milestone M2 applies the same group to actor, operation and approval, and
+// allows the time family (value types only, see domain_rules_test.go).
 func TestScopePackageUsesOnlyNetNetip(t *testing.T) {
 	const m = module + "/"
 	c := fakeList()
 	forbidden := []string{
 		"net", "net/http", "net/http/httputil", "net/smtp", "net/rpc", "net/rpc/jsonrpc", "net/url", "net/textproto", "net/mail",
-		"crypto/tls", "crypto/rand", "math/rand", "math/rand/v2", "os", "os/exec", "os/signal", "time", "io/fs", "path/filepath", "log", "syscall", "plugin",
+		"crypto/tls", "crypto/rand", "math/rand", "math/rand/v2", "os", "os/exec", "os/signal", "io/fs", "path/filepath", "log", "syscall", "plugin",
 	}
-	for _, rel := range []string{"internal/domain/scope", "internal/domain/scope/sub", "internal/domain/scope/deep/er"} {
+	for _, rel := range []string{"internal/domain/scope", "internal/domain/scope/sub", "internal/domain/scope/deep/er", "internal/domain/actor", "internal/domain/operation", "internal/domain/approval"} {
 		for _, imp := range forbidden {
 			if got := c.violations(rel, m+rel, []string{imp}); len(got) == 0 {
 				t.Errorf("%s importing %s was not refused", rel, imp)
 			}
 		}
-		for _, imp := range []string{"net/netip", "errors", "fmt", "sort", "strconv", "strings", "unicode/utf8", "slices", "math", "crypto/sha256"} {
+		for _, imp := range []string{"net/netip", "errors", "fmt", "sort", "strconv", "strings", "unicode/utf8", "slices", "math", "crypto/sha256", "time", "encoding/binary"} {
 			if got := c.violations(rel, m+rel, []string{imp}); len(got) != 0 {
 				t.Errorf("%s importing %s was refused: %v", rel, imp, got)
 			}
@@ -787,7 +812,7 @@ func TestScopePackageUsesOnlyNetNetip(t *testing.T) {
 		}
 	}
 	// Everything else stays refused in tests.
-	for _, imp := range []string{"net", "net/smtp", "crypto/rand", "crypto/tls", "os", "time"} {
+	for _, imp := range []string{"net", "net/smtp", "crypto/rand", "crypto/tls", "os"} {
 		if got := c.testViolations("internal/domain/scope", m+"internal/domain/scope", []string{imp}); len(got) == 0 {
 			t.Errorf("test import of %s was not refused", imp)
 		}

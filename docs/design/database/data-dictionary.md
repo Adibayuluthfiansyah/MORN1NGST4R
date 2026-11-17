@@ -479,7 +479,7 @@ Purpose: Content-addressed canonical operation snapshots. The hash covers assess
 | `canonical_target` | `text` | NOT NULL |  |  |  | Canonical target string. | Target data |
 | `parameters` | `jsonb` | NOT NULL |  | `'{}'` |  | Typed, validated, redacted parameters. No secrets. | Target data |
 | `declared_destinations` | `jsonb` | NOT NULL |  | `'[]'` |  | Declared non-target destinations (D-44). | Internal |
-| `limits` | `jsonb` | NOT NULL |  | `'{}'` |  | Concurrency, total duration, request rate, timeout, output size (D-55, D-70). Numbers come from the D-71 gate. | Internal |
+| `limits` | `jsonb` | NOT NULL |  | `'{}'` |  | Concurrency, total duration, request rate, timeout, output size (D-55, D-70). Numbers come from the D-71 gate. The domain (M2) binds the first three. Timeout and output size arrive with the sandbox and the tool manifest (M8, M10). | Internal |
 | `manifest_digest` | `bytea` | NOT NULL |  |  | c2 | SHA-256 of the manifest version used. | Internal |
 | `created_at` | `timestamptz` | NOT NULL |  | `now()` |  | Row creation time, database clock. | Internal |
 
@@ -529,7 +529,7 @@ Purpose: An approval bound to one exact operation (D-06, D-51). Human decision o
 | `max_attempts` | `integer` | NOT NULL |  | `1` | c4, c5 | Maximum launched attempts per job (3 for approval-bound active, 1 for intrusive, D-30, D-49). | Internal |
 | `validation_id` | `uuid` | NOT NULL | FK target_validations.id |  |  | Validation record current when requested. | Internal |
 | `scope_version_id` | `uuid` | NOT NULL | FK scope_versions.id |  |  | Scope version at approval. | Internal |
-| `policy_snapshot_hash` | `bytea` | NOT NULL |  |  |  | Policy versions at approval. | Internal |
+| `policy_snapshot_hash` | `bytea` | NOT NULL |  |  |  | Policy versions at approval. The approval checks of M2 compare it, `scope_version_id` and `validation_id` with the state in force at E1, E2, E3 and while the work runs. A difference denies (`approval_policy_changed`, `approval_scope_changed`, `approval_validation_changed`). | Internal |
 | `reauth_grant_id` | `uuid` | NULL | FK reauth_grants.id |  | c8, c15 | Grant consumed for an intrusive approval (D-58, D-69). | Internal |
 | `revoked_at` | `timestamptz` | NULL |  |  | c9 | Revocation time. | Internal |
 | `revoked_by` | `uuid` | NULL | FK users.id |  |  | Revoking human. | Personal (low) |
@@ -629,7 +629,7 @@ Purpose: One launched process per row. Launch accounting is separate from approv
 | `state` | `text` | NOT NULL |  | `'launching'` | c3, c4, c5 | Attempt state. | Internal |
 | `worker_instance` | `text` | NOT NULL |  |  |  | Worker instance id. | Internal |
 | `process_group_ref` | `text` | NULL |  |  |  | Process group or cgroup scope reference used to stop the tree. | Internal |
-| `started_at` | `timestamptz` | NOT NULL |  | `now()` |  | Launch time. | Internal |
+| `started_at` | `timestamptz` | NOT NULL |  | `now()` |  | Launch time. The approval domain (M2) keeps it as `Use.LaunchedAt()` of the latest attempt and runs the approved maximum duration from it. | Internal |
 | `ended_at` | `timestamptz` | NULL |  |  | c5 | End time. | Internal |
 | `termination_confirmed_at` | `timestamptz` | NULL |  |  | c4 | Time the whole process tree was confirmed gone. Null while unconfirmed (DB-14). | Internal |
 | `exit_code` | `integer` | NULL |  |  |  | Exit status. | Internal |

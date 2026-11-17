@@ -48,13 +48,27 @@
 // the canonical text that NewRule reads back to an equal rule, which is what
 // the data dictionary stores as canonical_value and ports_canonical.
 //
+// From milestone M2 the package also holds the policy decision function. Decide
+// (decide.go) is pure. It takes the operation, the rules, the validation record,
+// the policy state, the approval and the time, and returns allow, deny or
+// require-approval with one stable reason. An allow carries an
+// AuthorizedOperation (authorized.go): the decision ID, the hash of the
+// operation and an expiry, with unexported fields. A tool executor calls Verify
+// on it with the operation it is about to run. Only internal/application/scope
+// may call Decide, which the architecture test checks (P-04). Decide takes no
+// actor, because the order table does not let this package import actor. A
+// scope decision is still not readiness (D-89).
+//
 // Boundaries (structure.md 5.6, D-73):
 //
-//   - The package imports only the standard library, and from the net family
-//     only net/netip. The architecture test refuses anything else, including
-//     indirect imports of the network, TLS or randomness. There is no I/O, no
-//     clock, no environment and no network, and a name is never resolved. A
-//     host target meets only domain and wildcard rules. An address target meets
+//   - The package imports the standard library, and from the net family
+//     only net/netip, and from M2 on the operation and approval domain
+//     packages (the order table of structure.md 5.6). The architecture test
+//     refuses anything else, including indirect imports of the network, TLS or
+//     randomness. There is no I/O, no environment and no network, and a name is
+//     never resolved. The clock is never read: the package uses the types of
+//     package time and every decision takes the current time as an argument.
+//     A host target meets only domain and wildcard rules. An address target meets
 //     only ip and cidr rules. A hostname exclusion therefore does not block the
 //     same server reached by address (D-38, S1.1). No document may claim it does.
 //   - Names are ASCII only. Any non-ASCII byte is ambiguous and denied, and so

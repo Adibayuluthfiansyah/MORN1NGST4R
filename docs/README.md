@@ -1,6 +1,6 @@
 # Documentation
 
-MORN1NGST4R is in the design phase. The application code is the Phase 1 scaffold (a Go server skeleton with two health endpoints and a Next.js shell) and the M1 scope package, a pure domain package that nothing calls yet. The documents below describe what the product must do, why the main decisions were made, and the design that the implementation will follow.
+MORN1NGST4R is in the design phase. The application code is the Phase 1 scaffold (a Go server skeleton with two health endpoints and a Next.js shell) the M1 scope package and the M2 policy and approval domain (actor, operation, approval and the decision function), which are pure domain packages that nothing calls yet. The documents below describe what the product must do, why the main decisions were made, and the design that the implementation will follow.
 
 ## Where to start
 
