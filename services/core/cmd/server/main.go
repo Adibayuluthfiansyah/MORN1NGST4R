@@ -32,5 +32,9 @@ func run(ctx context.Context, environ []string, logOut io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return bootstrap.NewServer(cfg, logOut).ListenAndServe(ctx)
+	srv, err := bootstrap.NewServer(cfg, logOut)
+	if err != nil {
+		return err
+	}
+	return srv.ListenAndServe(ctx)
 }

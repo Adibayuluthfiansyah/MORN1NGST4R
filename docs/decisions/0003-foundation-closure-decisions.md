@@ -102,7 +102,7 @@ M1 therefore depends on choices 1, 6 and 10. All three are decided and have test
 - No password exists, so no password appears in a DSN, in the environment, in argv or in a file. A user-supplied DSN is not supported in the MVP. This closes O-43.
 - Procedure (implemented in M3 as Makefile targets, P-61): create the cluster, start it with `pg_ctl`, create roles and the database, run goose migrations as the migration role, stop with `pg_ctl stop`. Start-up and shutdown are explicit commands. No process manager.
 - Backup and recovery: `pg_dump` and a copy of the evidence directory, both written with owner-only permissions. Backups hold target data and audit rows, so they inherit the access restrictions of the source (`security.md` 12). Backups are never committed (`.gitignore`, D-84). A restore procedure is an M3 deliverable.
-- Idle memory and connection limits are not measured. M3 must measure them on the 8 GB reference laptop before the defaults are set.
+- Idle memory and connection limits are not measured. M3 must measure them on the 8 GB reference laptop before the defaults are set. Addendum of 2026-11-18 (M3): measured on a 7.7 GB laptop with PostgreSQL 18.6, proportional set size: 7 MB idle, 21 MB with the server connected, 59 MB with 27 of 30 connections open. The defaults of `scripts/db/pg-cluster.sh` (30 connections, 64 MB shared buffers) stay.
 
 ### D-68 Authentication bootstrap and recovery
 

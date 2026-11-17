@@ -18,7 +18,7 @@ import (
 // testConfig returns a valid configuration for the listener's address.
 func testConfig(t *testing.T, ln net.Listener) config.Config {
 	t.Helper()
-	cfg, err := config.Load(nil)
+	cfg, err := config.Load([]string{"HOME=/home/test"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,6 +27,17 @@ func testConfig(t *testing.T, ln net.Listener) config.Config {
 	cfg.HTTP.AllowedHosts = []string{addr}
 	cfg.HTTP.ShutdownTimeout = 2 * time.Second
 	return cfg
+}
+
+// newServer composes a server without a database: these tests are about the
+// HTTP layer. The database wiring is tested in tests/integration/server.
+func newServer(t *testing.T, cfg config.Config, w io.Writer) *bootstrap.Server {
+	t.Helper()
+	srv, err := bootstrap.NewServer(cfg, w, bootstrap.WithoutDatabase())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return srv
 }
 
 func listen(t *testing.T) net.Listener {
@@ -53,7 +64,7 @@ func start(t *testing.T, mutate func(*config.Config)) running {
 		mutate(&cfg)
 	}
 	var logs bytes.Buffer
-	srv := bootstrap.NewServer(cfg, &logs)
+	srv := newServer(t, cfg, &logs)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ctx, ln); close(done) }()
@@ -156,14 +167,14 @@ func TestGracefulShutdown(t *testing.T) {
 }
 
 func TestListenAndServeRefusesANonLoopbackAddress(t *testing.T) {
-	cfg, err := config.Load(nil)
+	cfg, err := config.Load([]string{"HOME=/home/test"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// A hand-built configuration bypasses config.Load. The server must still
 	// fail closed before it binds anything.
 	cfg.HTTP.Listen = netip.MustParseAddrPort("0.0.0.0:0")
-	srv := bootstrap.NewServer(cfg, io.Discard)
+	srv := newServer(t, cfg, io.Discard)
 	if err := srv.ListenAndServe(context.Background()); err == nil {
 		t.Error("ListenAndServe succeeded on 0.0.0.0, want an error")
 	}
@@ -175,8 +186,8 @@ func TestServeRefusesANonLoopbackListener(t *testing.T) {
 		t.Skipf("cannot listen on the wildcard address here: %v", err)
 	}
 	defer ln.Close()
-	cfg, _ := config.Load(nil)
-	srv := bootstrap.NewServer(cfg, io.Discard)
+	cfg, _ := config.Load([]string{"HOME=/home/test"})
+	srv := newServer(t, cfg, io.Discard)
 	if err := srv.Serve(context.Background(), ln); err == nil {
 		t.Error("Serve accepted a wildcard listener, want an error")
 	}

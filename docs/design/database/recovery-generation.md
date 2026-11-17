@@ -1,6 +1,6 @@
 # Recovery generation
 
-Status: design proposal (DB-28, DQ-17). Not implemented, not tested, and not an approved owner decision. It replaces the one-line restore rule of the first design pass (DB-27).
+Status: design proposal (DB-28, DQ-17). Not implemented, not tested, and not an approved owner decision. It replaces the one-line restore rule of the first design pass (DB-27). **M3 update (2026-11-18):** implemented and tested (gate G-recovery passed) for the M3 tables: `internal/application/recovery`, `internal/adapters/outbound/recoverymarker`, `internal/adapters/outbound/persistence/recovery.go`. Differences: the first run writes the marker inside the database transaction, `Advance` never recreates a missing marker, and the reconciliation takes a user id and a request id as input. Open parts are TD-M3-04 to TD-M3-06 in the plan.
 
 ## 1. Problem
 

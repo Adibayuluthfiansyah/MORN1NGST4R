@@ -1,6 +1,6 @@
 # Database design
 
-Status: design proposal for owner review. **Nothing here is implemented.** No PostgreSQL instance was created, no migration was written or run, and no repository or handler exists. This design is the blueprint for the persistence work of M3 and the slices that follow. Decisions made here carry `DB-nn` IDs. Open questions carry `DQ-nn` IDs and are recorded with their status in `../dq-decisions.md`. Approved decisions (`D-nn`) are cited and not changed.
+Status: design proposal for owner review. **Nothing here is implemented.** No PostgreSQL instance was created, no migration was written or run, and no repository or handler exists. This design is the blueprint for the persistence work of M3 and the slices that follow. Decisions made here carry `DB-nn` IDs. Open questions carry `DQ-nn` IDs and are recorded with their status in `../dq-decisions.md`. Approved decisions (`D-nn`) are cited and not changed. **M3 update (2026-11-18):** the M3 slices are implemented in `services/core/migrations` (00001 to 00007, 00013 to 00015). The result, the rulings and the differences from this design are in `.kiro/specs/mvp/plan.md`, section "Milestone M3".
 
 ## Contents
 

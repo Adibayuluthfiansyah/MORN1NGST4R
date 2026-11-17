@@ -1,6 +1,6 @@
 # Migration plan
 
-Status: design proposal. This is a specification. No migration file exists or is authorized by this task. Migrations are Goose files `services/core/migrations/NNNNN_name.sql`, sequential, forward only (D-80). A released migration is never edited. A correction is a new migration.
+Status: design proposal. This is a specification. No migration file exists or is authorized by this task. Migrations are Goose files `services/core/migrations/NNNNN_name.sql`, sequential, forward only (D-80). A released migration is never edited. A correction is a new migration. **M3 update (2026-11-18):** the M3 slices are implemented in `services/core/migrations` (00001 to 00007, 00013 to 00015). The result, the rulings and the differences from this design are in `.kiro/specs/mvp/plan.md`, section "Milestone M3".
 
 ## Strategy
 

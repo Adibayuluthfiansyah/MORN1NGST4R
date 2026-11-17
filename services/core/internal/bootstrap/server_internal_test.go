@@ -14,12 +14,15 @@ import (
 // request can do makes the server log a secret-named attribute, so the only
 // way to prove the wiring is to use the server's own logger.
 func TestServerLoggerRedactsSecretNamedAttributes(t *testing.T) {
-	cfg, err := config.Load(nil)
+	cfg, err := config.Load([]string{"HOME=/home/test"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	srv := NewServer(cfg, &out)
+	srv, err := NewServer(cfg, &out, WithoutDatabase())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	srv.logger.Info("probe event",
 		"password", "pw-secret-value",
@@ -50,12 +53,15 @@ func TestServerLoggerRedactsSecretNamedAttributes(t *testing.T) {
 
 // The http.Server error log shares the same redacting handler.
 func TestServerErrorLogUsesTheRedactingHandler(t *testing.T) {
-	cfg, err := config.Load(nil)
+	cfg, err := config.Load([]string{"HOME=/home/test"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	srv := NewServer(cfg, &out)
+	srv, err := NewServer(cfg, &out, WithoutDatabase())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if srv.http.ErrorLog == nil {
 		t.Fatal("http.Server.ErrorLog is nil, so net/http would log to stderr unredacted")
 	}

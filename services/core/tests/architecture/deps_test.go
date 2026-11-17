@@ -118,6 +118,8 @@ var rules = []rule{
 	{prefix: "internal/adapters/inbound", internal: []string{"internal/ports/inbound", "internal/domain"}, forbidStd: std("database/sql")},
 	{prefix: "internal/adapters/inbound/http", internal: []string{"internal/ports/inbound", "internal/domain", "internal/adapters/inbound/http"}, forbidStd: std("database/sql")},
 	{prefix: "internal/adapters/outbound", internal: []string{"internal/ports/outbound", "internal/domain", "internal/platform", "internal/infrastructure"}, forbidStd: std("net/http")},
+	// The PostgreSQL adapter keeps its sqlc-generated queries in a sub-package.
+	{prefix: "internal/adapters/outbound/persistence", internal: []string{"internal/adapters/outbound/persistence", "internal/ports/outbound", "internal/domain", "internal/platform", "internal/infrastructure"}, forbidStd: std("net/http")},
 	{prefix: "internal/infrastructure", internal: []string{"internal/infrastructure"}, forbidStd: std()},
 	{prefix: "internal/platform", internal: []string{"internal/platform"}, forbidStd: []string{"plugin"}},
 	{prefix: "internal/config", forbidStd: std("net/http")},
@@ -134,6 +136,9 @@ var external = []struct {
 }{
 	// Gin is isolated in the inbound HTTP adapter (structure.md section 7).
 	{path: "github.com/gin-gonic/gin", allowedIn: []string{"internal/adapters/inbound/http"}},
+	// pgx is isolated in the PostgreSQL adapter (structure.md section 6). The
+	// migration tool (goose) is run as a command and imported only by tests.
+	{path: "github.com/jackc/pgx/v5", allowedIn: []string{"internal/adapters/outbound/persistence"}},
 }
 
 // processCreation lists the packages that may call os.StartProcess or
