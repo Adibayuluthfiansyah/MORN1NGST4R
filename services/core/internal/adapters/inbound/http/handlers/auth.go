@@ -144,6 +144,12 @@ func fail(c *gin.Context, err error) {
 		response.Error(c, http.StatusConflict, response.CodeRecoveryNotRequired)
 	case errors.Is(err, inbound.ErrReauthSubjectInvalid):
 		response.Error(c, http.StatusUnprocessableEntity, response.CodeReauthSubjectInvalid)
+	case errors.Is(err, inbound.ErrEvidencePurged):
+		response.Error(c, http.StatusGone, response.CodeEvidencePurged)
+	case errors.Is(err, inbound.ErrEvidenceIntegrityFailed):
+		response.Error(c, http.StatusConflict, response.CodeEvidenceIntegrity)
+	case errors.Is(err, inbound.ErrProgramArchived):
+		response.Error(c, http.StatusConflict, response.CodeProgramArchived)
 	case errors.Is(err, inbound.ErrDatabaseUnavailable):
 		response.Error(c, http.StatusServiceUnavailable, response.CodeDatabaseUnavailable)
 	default:

@@ -11,7 +11,7 @@ import (
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/tests/integration/pgtest"
 )
 
-// grantMatrix is the reviewed grant matrix of migration 00015 (DB-04, P-13,
+// grantMatrix is the reviewed grant matrix of migrations 00015 and 00017 (DB-04, P-13,
 // migration-plan.md). Each entry is the table-level privileges as letters (S
 // select, I insert, U update, D delete) followed by the columns on which UPDATE
 // is granted separately. A table that is missing from a role has no privilege.
@@ -27,6 +27,9 @@ var grantMatrix = map[string]map[string][]string{
 		"assessments":               {"SIU"},
 		"audit_events":              {"SI"},
 		"bootstrap_secrets":         {"SIU"},
+		"evidence_integrity_checks": {"SI"},
+		"evidence_items":            {"SI"},
+		"evidence_status":           {"SI", "integrity_state", "last_check_id", "compromised_at", "updated_at"},
 		"job_attempts":              {"S", "state", "ended_at", "error_class"},
 		"job_transitions":           {"SI"},
 		"jobs":                      {"SI", "state", "control_state", "control_reason", "control_requested_at", "finished_at", "updated_at", "version"},
@@ -61,6 +64,9 @@ var grantMatrix = map[string]map[string][]string{
 		"assessment_transitions":    {"S"},
 		"assessments":               {"S"},
 		"audit_events":              {"SI"},
+		"evidence_integrity_checks": {"SI"},
+		"evidence_items":            {"SI"},
+		"evidence_status":           {"SI", "integrity_state", "last_check_id", "compromised_at", "updated_at"},
 		"job_attempts":              {"SI", "state", "process_group_ref", "ended_at", "termination_confirmed_at", "exit_code", "error_class", "tool_version", "tool_binary_sha256", "sandbox_digest", "argv_redacted"},
 		"job_transitions":           {"SI"},
 		"jobs":                      {"S", "state", "control_state", "control_reason", "approval_use_id", "lease_owner", "lease_expires_at", "heartbeat_at", "claim_epoch", "execution_attempts", "available_at", "failure_class", "finished_at", "updated_at", "version"},
@@ -82,7 +88,10 @@ var grantMatrix = map[string]map[string][]string{
 		"targets":                   {"S"},
 	},
 	"ms_retention": {
-		"audit_events": {"S"},
+		"audit_events":              {"S"},
+		"evidence_integrity_checks": {"S"},
+		"evidence_items":            {"S"},
+		"evidence_status":           {"S", "retention_state", "purged_at", "purged_by", "updated_at"},
 	},
 }
 
@@ -104,8 +113,8 @@ func TestGrantsMatchTheReviewedMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tables) != 33 {
-		t.Fatalf("%d tables, want 33", len(tables))
+	if len(tables) != 36 {
+		t.Fatalf("%d tables, want 36", len(tables))
 	}
 	for _, role := range []string{"ms_api", "ms_worker", "ms_retention"} {
 		for tbl := range grantMatrix[role] {

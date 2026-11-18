@@ -39,6 +39,8 @@ const (
 	envAllowedOrigins = "MORNINGSTAR_HTTP_ALLOWED_ORIGINS"
 	envDBSocketDir    = "MORNINGSTAR_DB_SOCKET_DIR"
 	envStateDir       = "MORNINGSTAR_STATE_DIR"
+	envEvidenceDir    = "MORNINGSTAR_EVIDENCE_DIR"
+	envEvidenceMax    = "MORNINGSTAR_EVIDENCE_MAX_BYTES"
 
 	// envWebAPIOrigin is a web-only setting and envScriptPGBase belongs to the
 	// cluster script. See Load.
@@ -54,6 +56,7 @@ type Config struct {
 	Log      Log
 	Database Database
 	State    State
+	Evidence Evidence
 	Auth     Auth
 }
 
@@ -79,6 +82,21 @@ type Database struct {
 type State struct {
 	Dir string
 }
+
+// Evidence locates the evidence store (D-62, D-77) and bounds one artifact.
+// Evidence is user data, so the default is under XDG_DATA_HOME and not under the
+// state directory. MaxBytes is held in memory twice at most while an artifact is
+// redacted or served, so it is bounded. The owner approved the default as the
+// provisional MVP limit on 2026-11-18.
+type Evidence struct {
+	Dir      string
+	MaxBytes int64
+}
+
+const (
+	defaultEvidenceMax = 8 << 20
+	largestEvidenceMax = 64 << 20
+)
 
 // HTTP configures the HTTP server.
 type HTTP struct {
@@ -116,7 +134,7 @@ func Load(environ []string) (Config, error) {
 			continue
 		}
 		switch key {
-		case envHTTPListen, envAllowedHosts, envAllowedOrigins, envLogLevel, envLogFormat, envDBSocketDir, envStateDir:
+		case envHTTPListen, envAllowedHosts, envAllowedOrigins, envLogLevel, envLogFormat, envDBSocketDir, envStateDir, envEvidenceDir, envEvidenceMax:
 			values[key] = value
 		case envWebAPIOrigin, envScriptPGBase:
 			// Owned and validated by apps/web (next.config.ts) and by
@@ -219,6 +237,26 @@ func Load(environ []string) (Config, error) {
 		errs = append(errs, fmt.Errorf("%s is not set and %w", envStateDir, err))
 	} else {
 		cfg.State.Dir = filepath.Join(base, "morningstar")
+	}
+	if raw, ok := values[envEvidenceDir]; ok {
+		dir, err := parseDir(raw, 200)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", envEvidenceDir, err))
+		}
+		cfg.Evidence.Dir = dir
+	} else if base, err := xdgBase(env, "XDG_DATA_HOME", ".local/share"); err != nil {
+		errs = append(errs, fmt.Errorf("%s is not set and %w", envEvidenceDir, err))
+	} else {
+		cfg.Evidence.Dir = filepath.Join(base, "morningstar", "evidence")
+	}
+	cfg.Evidence.MaxBytes = defaultEvidenceMax
+	if raw, ok := values[envEvidenceMax]; ok {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || strconv.FormatInt(n, 10) != raw || n < 1 || n > largestEvidenceMax {
+			errs = append(errs, fmt.Errorf("%s: %q is not a whole number of bytes from 1 to %d", envEvidenceMax, raw, largestEvidenceMax))
+		} else {
+			cfg.Evidence.MaxBytes = n
+		}
 	}
 
 	if len(errs) > 0 {

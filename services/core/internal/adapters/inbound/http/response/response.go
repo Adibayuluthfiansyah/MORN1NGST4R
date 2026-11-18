@@ -38,6 +38,9 @@ const (
 	CodeRateLimited          = "rate_limited"
 	CodeRecoveryRequired     = "recovery_required"
 	CodeDatabaseUnavailable  = "database_unavailable"
+	CodeEvidencePurged       = "evidence_purged"
+	CodeEvidenceIntegrity    = "evidence_integrity_failed"
+	CodeProgramArchived      = "program_archived"
 )
 
 var messages = map[string]string{
@@ -66,6 +69,9 @@ var messages = map[string]string{
 	CodeRateLimited:          "Too many requests.",
 	CodeRecoveryRequired:     "The installation needs recovery after a detected restore. Only GET /session and the reconcile route work.",
 	CodeDatabaseUnavailable:  "The database is unavailable. No operation was started.",
+	CodeEvidencePurged:       "The evidence content was purged.",
+	CodeEvidenceIntegrity:    "The evidence hash check failed or the content is missing.",
+	CodeProgramArchived:      "The program is archived and read-only.",
 }
 
 var retryable = map[string]bool{CodeRateLimited: true, CodeDatabaseUnavailable: true}

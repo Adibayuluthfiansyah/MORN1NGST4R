@@ -113,7 +113,7 @@ check('state transition CHECKs exist', 'CHECK legal pairs' in ci and 'only a hum
 
 # ------------------------------------------------------------ migrations
 mig_ids = re.findall(r'(?m)^### (\d{5}) `(\w+)`', mp)
-check('migrations are ordered and unique', [m[0] for m in mig_ids] == sorted(set(m[0] for m in mig_ids)) and len(mig_ids) == 16, mig_ids)
+check('migrations are ordered and unique', [m[0] for m in mig_ids] == sorted(set(m[0] for m in mig_ids)) and len(mig_ids) == 17, mig_ids)
 created = {}
 for blk in re.split(r'(?m)^### ', mp)[1:]:
     mid = blk[:5]

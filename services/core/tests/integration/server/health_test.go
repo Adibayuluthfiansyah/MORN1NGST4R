@@ -58,7 +58,7 @@ func startServer(t *testing.T, c *pgtest.Cluster, state string) running {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load([]string{"HOME=/home/test", "MORNINGSTAR_DB_SOCKET_DIR=" + c.SocketDir, "MORNINGSTAR_STATE_DIR=" + state})
+	cfg, err := config.Load([]string{"HOME=/home/test", "MORNINGSTAR_DB_SOCKET_DIR=" + c.SocketDir, "MORNINGSTAR_STATE_DIR=" + state, "MORNINGSTAR_EVIDENCE_DIR=" + filepath.Join(t.TempDir(), "evidence")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestServerDoesNotServeWhenTheFirstRunMarkerCannotBeWritten(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load([]string{"HOME=/home/test", "MORNINGSTAR_DB_SOCKET_DIR=" + c.SocketDir, "MORNINGSTAR_STATE_DIR=" + state})
+	cfg, err := config.Load([]string{"HOME=/home/test", "MORNINGSTAR_DB_SOCKET_DIR=" + c.SocketDir, "MORNINGSTAR_STATE_DIR=" + state, "MORNINGSTAR_EVIDENCE_DIR=" + filepath.Join(t.TempDir(), "evidence")})
 	if err != nil {
 		t.Fatal(err)
 	}
