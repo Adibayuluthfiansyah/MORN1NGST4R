@@ -1,6 +1,6 @@
 # Migration plan
 
-Status: design proposal. This is a specification. No migration file exists or is authorized by this task. Migrations are Goose files `services/core/migrations/NNNNN_name.sql`, sequential, forward only (D-80). A released migration is never edited. A correction is a new migration. **M3 update (2026-11-18):** the M3 slices are implemented in `services/core/migrations` (00001 to 00007, 00013 to 00015). The result, the rulings and the differences from this design are in `.kiro/specs/mvp/plan.md`, section "Milestone M3".
+Status: design proposal. This is a specification. No migration file exists or is authorized by this task. Migrations are Goose files `services/core/migrations/NNNNN_name.sql`, sequential, forward only (D-80). A released migration is never edited. A correction is a new migration. **M3 update (2026-11-18):** the M3 slices are implemented in `services/core/migrations` (00001 to 00007, 00013 to 00015). The result, the rulings and the differences from this design are in `.kiro/specs/mvp/plan.md`, section "Milestone M3". **M6 update (2026-11-18):** slice 00009 is implemented, and a new slice 00017 holds its indexes, triggers and grants, because 00013 to 00015 were applied before 00009 existed and are never edited. 00009 depends on 00007 only: evidence holds no reference to the asset tables of 00008 (M20). The deviations are in `.kiro/specs/mvp/plan.md`, section "Milestone M6".
 
 ## Strategy
 
@@ -24,7 +24,7 @@ Status: design proposal. This is a specification. No migration file exists or is
 | 00006 | `authorization_and_execution` | M3 (behavior in M2, M7, M19) | 00005 | yes | Approval and job history |
 | 00007 | `audit` | M3 (behavior in M5) | 00006 | yes | Audit history |
 | 00008 | `asset_intelligence` | M20 | 00007 | yes | Inventory |
-| 00009 | `evidence` | M6 | 00008 | yes | Evidence metadata. Files are untouched. |
+| 00009 | `evidence` | M6 | 00007 | yes | Evidence metadata. Files are untouched. |
 | 00010 | `findings_and_reports` | M22 and M14 | 00009 | yes | Finding and verification history |
 | 00011 | `ai_and_integrations` | M10, M12, M25 | 00010 | yes | Configuration and transmission records |
 | 00012 | `platform` | M16 | 00002 | yes | None of value |
@@ -32,6 +32,7 @@ Status: design proposal. This is a specification. No migration file exists or is
 | 00014 | `integrity_triggers` | M3 and later slices | 00013 | yes | none |
 | 00015 | `grants` | M3 and later slices | 00014 | yes | none |
 | 00016 | `audit_sink` | M5 | 00015 | yes | none |
+| 00017 | `evidence_integrity` | M6 | 00009, 00015 | yes | none |
 
 ## Detail per migration
 
@@ -124,7 +125,8 @@ Status: design proposal. This is a specification. No migration file exists or is
 - Milestone: M6
 - Tables created: `evidence_items`, `evidence_integrity_checks`, `evidence_status`
 - Cross-migration foreign keys created here (the referenced or referencing table is created here, DB-21): `evidence_integrity_checks(actor_user_id)` -> `users`; `evidence_items(assessment_id)` -> `assessments`; `evidence_items(attempt_id)` -> `job_attempts`; `evidence_items(decision_id)` -> `policy_decisions`; `evidence_items(job_id)` -> `jobs`; `evidence_items(program_id)` -> `programs`; `evidence_items(program_id, assessment_id)` -> `assessments`; `evidence_items(program_id, target_id)` -> `targets`; `evidence_items(target_id)` -> `targets`; `evidence_status(purged_by)` -> `users`; `observations(evidence_id)` -> `evidence_items`
-- Depends on: 00008
+- Depends on: 00007
+- Note: the design listed 00008 as a dependency, but evidence holds no reference to the asset tables, so M6 builds this slice before M20. The deferred foreign key from `observations` to `evidence_items` moves to the slice of M20 (TD-M6-04). Indexes, triggers and grants are in 00017.
 - Forward behavior: creates the objects above inside one transaction. Fails closed on an existing object (no `IF NOT EXISTS`, DB-22).
 - Rollback consideration: Drop tables in reverse order.
 
@@ -197,6 +199,16 @@ Status: design proposal. This is a specification. No migration file exists or is
 - Other objects: `audit_events_ck_c2` replaced by a check that also accepts `anonymous`. The unique partial index `system_alerts_one_open_audit_alert`.
 - Depends on: 00015
 - Forward behavior: runs in one transaction. Rows written before it keep their actor kind, because audit rows are append-only.
+- Rollback consideration: none. Migrations are forward only.
+
+### 00017 `evidence_integrity`
+
+- Purpose: The indexes, triggers and grants of the evidence slice (M6, D-77, P-37, DB-11, DB-17).
+- Milestone: M6
+- Tables created: none
+- Other objects: five indexes (`evidence_assessment_idx`, `evidence_job_idx`, `evidence_sha_idx`, `evidence_checks_idx`, `evidence_status_state_idx`). Items and checks are append-only (`forbid_update_delete`, `forbid_truncate`). `evidence_status` accepts an update of the integrity and retention columns only (`forbid_update_except`), cannot be deleted or truncated, and the function `evidence_status_guard` keeps a compromised item compromised (the time of the first mark stays) and makes a purge final. Grants: `ms_api` and `ms_worker` SELECT and INSERT on the three tables and UPDATE of `integrity_state`, `last_check_id`, `compromised_at` and `updated_at` on the status. `ms_retention` SELECT and UPDATE of the retention columns.
+- Depends on: 00009, 00015
+- Forward behavior: runs in one transaction.
 - Rollback consideration: none. Migrations are forward only.
 
 ## Grants matrix (migration 00015)

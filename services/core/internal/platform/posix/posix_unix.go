@@ -19,6 +19,9 @@ import (
 // NoFollow is the open flag that refuses a symlink in the last path element.
 const NoFollow = syscall.O_NOFOLLOW
 
+// NonBlock is the open flag that keeps the open of a named pipe from waiting for a writer.
+const NonBlock = syscall.O_NONBLOCK
+
 // LockFile takes an exclusive advisory lock (flock) on the file at path, which
 // it creates with mode 0600 when it does not exist. It blocks until the lock is
 // held. The returned function releases the lock and closes the file. The lock

@@ -518,7 +518,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 Each item has a SHA-256 and provenance fields. AC2 Target cookies and authorization headers are not stored in clear text. AC3 Evidence files have owner-only permissions.
 - **Dependencies:** FR-JOB-001.
 - **Security:** T-49. Redacted evidence is the evidence of record, raw capture is off by default and needs a policy change, there is no encryption at rest in the MVP, and retention is by audited purge (D-77).
-- **MVP status:** Planned (M6, capture from jobs in M11).
+- **MVP status:** M6 backend implemented and tested: redaction before the write (raw capture off by default and allowed only by a per-assessment setting that a human turned on), SHA-256 and size, provenance fields, a file store with owner-only mode 0600 in a 0700 directory, and the routes EVD-01 to EVD-04. AC1 to AC3 hold at that level. Planned: capture from jobs (M7 worker composition, M11), the tool provenance fields from the tool adapter (M10).
 - **Source:** Decided. D-10, D-77, `P 5.1`, `SEC 9`. Write protocol P-37 adopted.
 
 #### FR-EVIDENCE-002 Integrity verification
@@ -528,7 +528,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 A modified file is detected on read. AC2 Writing to an existing evidence name fails. AC3 An item that fails its check cannot support a Verified transition.
 - **Dependencies:** FR-EVIDENCE-001.
 - **Security:** The hash and file share a trust domain, so the check detects corruption and one-sided edits, not a determined local attacker (T-50).
-- **MVP status:** Planned (M6).
+- **MVP status:** M6 backend implemented and tested: AC1 (a modified, swapped, appended, removed, symlinked or hard-linked file is detected on every read and by `POST /evidence/{id}/integrity-checks`) and AC2 (publish by `link`, never by rename, so an existing name is never replaced). AC3: the domain exposes `IntegrityState.SupportsVerification` and a compromised item stays compromised in the database. The Verified transition that must call it is M22 (TD-M6-07).
 - **Source:** Decided. D-10, D-77, `SEC 9`; P-37 adopted.
 
 #### FR-EVIDENCE-003 Safe display and download
@@ -538,7 +538,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 Evidence containing a script tag renders inert. AC2 Responses carry the required headers. AC3 Evidence files download as attachments.
 - **Dependencies:** FR-EVIDENCE-001.
 - **Security:** T-47.
-- **MVP status:** Planned (M13 headers, M24 viewer).
+- **MVP status:** The download route EVD-05 is implemented in M6 (attachment of an opaque type, nosniff, no-store, CSP of none, the bytes hashed before the first one is sent). Planned: M13 headers and viewer, M24.
 - **Source:** Decided. `SEC 9` (approved with B1), D-79 (framing denial).
 
 ### Findings
@@ -686,7 +686,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 An operation does not start when the audit write fails. AC2 Revocation still takes effect when audit is down. AC3 The runtime database role cannot update or delete audit rows. AC4 Audit retries are bounded and exhaustion raises a persistent alert.
 - **Dependencies:** M3.
 - **Security:** T-51, T-52. Same-user processes can connect as another database role under peer authentication (T-61).
-- **MVP status:** M5 implements and tests AC1 to AC4 for the operations that exist today (the authentication use case): a required record that fails rolls the operation back, a denial and a revocation still take effect, the runtime role cannot change a record, and exhausted retries raise one persistent alert that survives a restart. The retry bound is provisional and waits for the owner (gate G2). The use cases that start jobs and approvals call the same sink in M7, M19 and M21 (TD-M5-01).
+- **MVP status:** M5 implements and tests AC1 to AC4 for the operations that exist today (the authentication use case): a required record that fails rolls the operation back, a denial and a revocation still take effect, the runtime role cannot change a record, and exhausted retries raise one persistent alert that survives a restart. The retry bound was approved by the owner on 2026-11-18 (3 attempts, waits of 100 and 400 ms, 1 second per attempt). The use cases that start jobs and approvals call the same sink in M7, M19 and M21 (TD-M5-01).
 - **Source:** Decided requirement. `SEC 13`, D-12, D-23, D-48. The hash chain is deferred and accepted (D-78).
 
 #### FR-CRED-001 Credential protection
@@ -762,7 +762,7 @@ This section maps the existing decisions to product requirements. It does not re
 | SR-12 | Localhost inbound protection | Decided requirement, Conditional mechanism | FR-AUTH-002 | D-33; T-54 to T-57, T-68 |
 | SR-13 | Credential protection | Decided (D-52, D-85). Worker access to the Secret Service not verified, gate in M25. | FR-CRED-001 | D-08, D-52, D-85; T-62, T-63 |
 | SR-14 | AI provider data disclosure | Decided (D-46, D-50, D-81). Trusted-LAN category deferred (O-36). | FR-AI-002, NFR-PRIV-001 | D-46, D-50, D-81; T-43 |
-| SR-15 | Evidence integrity | Decided (D-10, D-77). Protocol adopted (P-37), not implemented. | FR-EVIDENCE-001, FR-EVIDENCE-002 | D-10, D-77; T-49, T-50 |
+| SR-15 | Evidence integrity | Decided (D-10, D-77). Protocol adopted (P-37). Implemented in M6 for the local file store. | FR-EVIDENCE-001, FR-EVIDENCE-002 | D-10, D-77; T-49, T-50 |
 | SR-16 | Audit logging | Decided (approved with B1). Hash chain deferred and accepted (D-78). | FR-AUDIT-001 | SEC 13, D-12, D-78; T-51 to T-53 |
 | SR-17 | Resource limits | Decided list (D-70). Mechanism Conditional. | FR-TOOL-002, FR-APPROVAL-006 | D-42, D-55, D-70; T-30, T-31 |
 | SR-18 | Policy change control | Decided (D-53, D-64 choice 4). | FR-POLICY-002 | D-53, D-64; T-20, T-21 |

@@ -54,24 +54,26 @@ func (s *safeBuffer) String() string {
 }
 
 type app struct {
-	t       *testing.T
-	c       *pgtest.Cluster
-	url     string
-	addr    string
-	srv     *bootstrap.Server
-	logs    *safeBuffer
-	runtime string
-	state   string
-	cancel  context.CancelFunc
-	done    chan error
+	t        *testing.T
+	c        *pgtest.Cluster
+	url      string
+	addr     string
+	srv      *bootstrap.Server
+	logs     *safeBuffer
+	runtime  string
+	state    string
+	evidence string
+	cancel   context.CancelFunc
+	done     chan error
 }
 
 type options struct {
-	runtime string
-	state   string
-	origins []string
-	hosts   []string
-	params  *passwordhash.Params
+	runtime  string
+	state    string
+	evidence string
+	origins  []string
+	hosts    []string
+	params   *passwordhash.Params
 }
 
 func memoryRuntime(t *testing.T) string {
@@ -92,6 +94,9 @@ func start(t *testing.T, c *pgtest.Cluster, o options) *app {
 	if o.runtime == "" {
 		o.runtime = memoryRuntime(t)
 	}
+	if o.evidence == "" {
+		o.evidence = filepath.Join(t.TempDir(), "evidence")
+	}
 	if o.state == "" {
 		o.state = filepath.Join(t.TempDir(), "state")
 	}
@@ -99,7 +104,7 @@ func start(t *testing.T, c *pgtest.Cluster, o options) *app {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environ := []string{"HOME=/home/test", "MORNINGSTAR_DB_SOCKET_DIR=" + c.SocketDir, "MORNINGSTAR_STATE_DIR=" + o.state, "XDG_RUNTIME_DIR=" + o.runtime}
+	environ := []string{"HOME=/home/test", "MORNINGSTAR_DB_SOCKET_DIR=" + c.SocketDir, "MORNINGSTAR_STATE_DIR=" + o.state, "MORNINGSTAR_EVIDENCE_DIR=" + o.evidence, "XDG_RUNTIME_DIR=" + o.runtime}
 	if len(o.origins) > 0 {
 		environ = append(environ, "MORNINGSTAR_HTTP_ALLOWED_ORIGINS="+strings.Join(o.origins, ","))
 	}
@@ -122,7 +127,7 @@ func start(t *testing.T, c *pgtest.Cluster, o options) *app {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	a := &app{t: t, c: c, url: "http://" + addr, addr: addr, srv: srv, logs: logs, runtime: o.runtime, state: o.state, cancel: cancel, done: make(chan error, 1)}
+	a := &app{t: t, c: c, url: "http://" + addr, addr: addr, srv: srv, logs: logs, runtime: o.runtime, state: o.state, evidence: o.evidence, cancel: cancel, done: make(chan error, 1)}
 	go func() { a.done <- srv.Serve(ctx, ln); close(a.done) }()
 	t.Cleanup(a.stop)
 	a.waitStarted()

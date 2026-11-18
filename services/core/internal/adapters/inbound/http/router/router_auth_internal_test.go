@@ -82,7 +82,7 @@ const (
 func authEngine(t *testing.T) (*stubAuth, http.Handler) {
 	t.Helper()
 	st := &stubAuth{}
-	engine := build(Deps{Health: fakeHealthStub{}, Auth: st, AllowedHosts: []string{goodHost}, AllowedOrigins: []string{goodOrigin}})
+	engine := build(Deps{Health: fakeHealthStub{}, Auth: st, Evidence: &stubEvidence{st}, AllowedHosts: []string{goodHost}, AllowedOrigins: []string{goodOrigin}})
 	return st, engine
 }
 
@@ -112,6 +112,11 @@ var table = []route{
 	{"POST", "/api/v1/sessions/7a1c2b3d-0000-4000-8000-000000000001/revoke", "session", false, true, ""},
 	{"POST", "/api/v1/session/reauthenticate", "session", true, true, `{"subject":{}}`},
 	{"POST", "/api/v1/account/password", "session", true, true, ""},
+	{"GET", "/api/v1/assessments/7a1c2b3d-0000-4000-8000-0000000000e1/evidence", "session", false, true, ""},
+	{"GET", "/api/v1/evidence/7a1c2b3d-0000-4000-8000-0000000000e2", "session", false, true, ""},
+	{"POST", "/api/v1/evidence/7a1c2b3d-0000-4000-8000-0000000000e2/integrity-checks", "session", false, true, ""},
+	{"GET", "/api/v1/evidence/7a1c2b3d-0000-4000-8000-0000000000e2/integrity-checks", "session", false, true, ""},
+	{"GET", "/api/v1/evidence/7a1c2b3d-0000-4000-8000-0000000000e2/content", "session", false, true, ""},
 }
 
 func (r route) request(mods ...func(*http.Request)) *http.Request {
@@ -175,14 +180,14 @@ func codeOf(body string) string {
 // The inventory of registered routes is exactly the table.
 func TestRouteInventoryMatchesTheTable(t *testing.T) {
 	st := &stubAuth{}
-	engine := build(Deps{Health: fakeHealthStub{}, Auth: st, AllowedHosts: []string{goodHost}, AllowedOrigins: []string{goodOrigin}})
+	engine := build(Deps{Health: fakeHealthStub{}, Auth: st, Evidence: &stubEvidence{st}, AllowedHosts: []string{goodHost}, AllowedOrigins: []string{goodOrigin}})
 	have := map[string]bool{}
 	for _, r := range engine.Routes() {
 		have[r.Method+" "+r.Path] = true
 	}
 	want := map[string]bool{"GET /api/v1/health/live": true, "GET /api/v1/health/ready": true}
 	for _, r := range table {
-		p := strings.Replace(r.path, "7a1c2b3d-0000-4000-8000-000000000001", ":sessionId", 1)
+		p := strings.NewReplacer("7a1c2b3d-0000-4000-8000-000000000001", ":sessionId", "7a1c2b3d-0000-4000-8000-0000000000e1", ":assessmentId", "7a1c2b3d-0000-4000-8000-0000000000e2", ":evidenceId").Replace(r.path)
 		want[r.method+" "+p] = true
 	}
 	var extra, missing []string

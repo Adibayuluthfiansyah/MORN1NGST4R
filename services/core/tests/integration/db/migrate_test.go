@@ -32,7 +32,7 @@ func TestMigrationsApplyInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []int64{0, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16}
+	want := []int64{0, 1, 2, 3, 4, 5, 6, 7, 9, 13, 14, 15, 16, 17}
 	if len(got) != len(want) {
 		t.Fatalf("applied versions = %v, want %v", got, want)
 	}
@@ -57,7 +57,7 @@ func TestSchemaMatchesTheDataDictionary(t *testing.T) {
 		t.Fatal(err)
 	}
 	domain := regexp.MustCompile(`Domain: (\w+)\.`)
-	m3 := map[string]bool{"identity": true, "policy": true, "scope": true, "assessment": true, "authorization": true, "execution": true, "audit": true}
+	m3 := map[string]bool{"identity": true, "policy": true, "scope": true, "assessment": true, "authorization": true, "execution": true, "audit": true, "evidence": true}
 	heading := regexp.MustCompile("(?m)^### `(\\w+)`$")
 	locs := heading.FindAllStringSubmatchIndex(string(text), -1)
 	var sections [][]string
@@ -89,8 +89,8 @@ func TestSchemaMatchesTheDataDictionary(t *testing.T) {
 		}
 		want[s[1]] = cols
 	}
-	if len(want) != 33 {
-		t.Fatalf("the data dictionary has %d tables in the M3 domains, want 33", len(want))
+	if len(want) != 36 {
+		t.Fatalf("the data dictionary has %d tables in the domains of M3 and M6, want 36", len(want))
 	}
 
 	rows, err := conn.Query(t.Context(), `
@@ -144,7 +144,7 @@ func TestSchemaMatchesTheDataDictionary(t *testing.T) {
 	}
 	for tbl := range have {
 		if _, ok := want[tbl]; !ok {
-			problems = append(problems, "table "+tbl+" is not in the M3 domains of the dictionary")
+			problems = append(problems, "table "+tbl+" is not in the M3 and M6 domains of the dictionary")
 		}
 	}
 	sort.Strings(problems)

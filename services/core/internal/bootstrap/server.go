@@ -19,10 +19,12 @@ import (
 
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/inbound/http/router"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/bootstrapfile"
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/evidencefile"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/passwordhash"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/persistence"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/recoverymarker"
 	authapp "github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/auth"
+	evidenceapp "github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/evidence"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/health"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/recovery"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/config"
@@ -51,10 +53,10 @@ const (
 )
 
 // auditRetryPolicy is the bound on the retries of an audit write (SEC 13, D-48).
-// PROVISIONAL: the design says the bound is "set by security policy" and gives
-// no number (threat-model C-33, gate G2), so these values wait for the owner's
-// decision. Three attempts follow the default of D-30 for job attempts. The
-// worst case of one write is 3.5 seconds. Changing them changes only this value.
+// The design leaves the number to "security policy" (threat-model C-33), and the
+// owner approved these values on 2026-11-18 (TD-M5-02). Three attempts follow
+// the default of D-30 for job attempts. The worst case of one write is 3.5
+// seconds. Changing them changes only this value.
 var auditRetryPolicy = audit.RetryPolicy{
 	MaxAttempts:    3,
 	Delays:         []time.Duration{100 * time.Millisecond, 400 * time.Millisecond},
@@ -71,6 +73,8 @@ type Server struct {
 	db       *persistence.DB
 	recovery *recovery.Service
 	auth     *authapp.Service
+	evidence *evidenceapp.Service
+	files    *evidencefile.Store
 }
 
 // ServerOption changes how NewServer composes the server.
@@ -109,6 +113,8 @@ func NewServer(cfg config.Config, logOut io.Writer, opts ...ServerOption) (*Serv
 		db     *persistence.DB
 		rec    *recovery.Service
 		auth   *authapp.Service
+		evid   *evidenceapp.Service
+		files  *evidencefile.Store
 	)
 	if o.database {
 		var err error
@@ -138,6 +144,14 @@ func NewServer(cfg config.Config, logOut io.Writer, opts ...ServerOption) (*Serv
 			SecretFile: bootstrapfile.New(cfg.Auth.RuntimeDir), Tx: db.Transactor(), Recovery: rec,
 			NewID: ids.New, Now: time.Now, Logger: logger,
 		})
+		if files, err = evidencefile.New(cfg.Evidence.Dir, cfg.Evidence.MaxBytes); err != nil {
+			auth.Close()
+			db.Close()
+			return nil, fmt.Errorf("evidence store: %w", err)
+		}
+		evid = evidenceapp.New(evidenceapp.Deps{
+			Store: files, Repo: db.Evidence(), Audit: sink, Tx: db.Transactor(), NewID: ids.New, Now: time.Now, Logger: logger,
+		})
 	}
 	healthSvc := health.New(probes, readinessTimeout, logger)
 
@@ -150,6 +164,9 @@ func NewServer(cfg config.Config, logOut io.Writer, opts ...ServerOption) (*Serv
 	if auth != nil {
 		routerDeps.Auth = auth
 	}
+	if evid != nil {
+		routerDeps.Evidence = evid
+	}
 	handler := router.New(routerDeps)
 
 	return &Server{
@@ -158,6 +175,8 @@ func NewServer(cfg config.Config, logOut io.Writer, opts ...ServerOption) (*Serv
 		db:       db,
 		recovery: rec,
 		auth:     auth,
+		evidence: evid,
+		files:    files,
 		http: &http.Server{
 			Handler:           handler,
 			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
@@ -191,10 +210,17 @@ func (s *Server) Transactor() outbound.Transactor {
 // Recovery returns the recovery service, or nil WithoutDatabase.
 func (s *Server) Recovery() *recovery.Service { return s.recovery }
 
+// Evidence returns the evidence use case, or nil WithoutDatabase. Use cases that
+// produce artifacts (tool results, notes) store them through its Capture.
+func (s *Server) Evidence() *evidenceapp.Service { return s.evidence }
+
 // Close releases the database pool. Serve calls it when it returns.
 func (s *Server) Close() {
 	if s.auth != nil {
 		s.auth.Close()
+	}
+	if s.files != nil {
+		_ = s.files.Close()
 	}
 	if s.db != nil {
 		s.db.Close()

@@ -42,6 +42,7 @@ func TestRunServesUntilCancelled(t *testing.T) {
 		"MORNINGSTAR_HTTP_LISTEN=" + addr,
 		"MORNINGSTAR_DB_SOCKET_DIR=" + t.TempDir(), // no database listens here
 		"MORNINGSTAR_STATE_DIR=" + filepath.Join(t.TempDir(), "state"),
+		"MORNINGSTAR_EVIDENCE_DIR=" + filepath.Join(t.TempDir(), "evidence"),
 	}
 	go func() { done <- run(ctx, environ, &logs) }()
 

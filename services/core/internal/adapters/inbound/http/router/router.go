@@ -26,6 +26,9 @@ type Deps struct {
 	// Auth is nil only in tests of the health routes. Without it no
 	// authentication route exists.
 	Auth inbound.Auth
+	// Evidence is nil when the server runs without a database or an evidence
+	// directory. Without it no evidence route exists.
+	Evidence inbound.Evidence
 	// AllowedHosts is the exact Host allow-list. Empty denies everything.
 	AllowedHosts []string
 	// AllowedOrigins is the exact Origin allow-list of state-changing requests.
@@ -123,6 +126,16 @@ func authRoutes(v1 *gin.RouterGroup, d Deps) {
 	g.POST("/sessions/:sessionId/revoke", session, writeLimit, origin, sessionCSRF, h.Revoke)
 	g.POST("/session/reauthenticate", jsonBody, session, reauthLimit, origin, sessionCSRF, h.Reauthenticate)
 	g.POST("/account/password", jsonBody, session, writeLimit, origin, sessionCSRF, h.ChangePassword)
+
+	if d.Evidence != nil {
+		ev := handlers.NewEvidence(d.Evidence)
+		downloadLimit := middleware.RateLimitSession(middleware.NewLimiter(30, time.Minute))
+		g.GET("/assessments/:assessmentId/evidence", session, readLimit, ev.List)
+		g.GET("/evidence/:evidenceId", session, readLimit, ev.Get)
+		g.POST("/evidence/:evidenceId/integrity-checks", session, writeLimit, origin, sessionCSRF, ev.Check)
+		g.GET("/evidence/:evidenceId/integrity-checks", session, readLimit, ev.Checks)
+		g.GET("/evidence/:evidenceId/content", session, downloadLimit, ev.Content)
+	}
 }
 
 // allowedMethods returns a function that maps a request path to the Allow header

@@ -36,7 +36,7 @@ func TestLoadPathDefaultsFollowXDG(t *testing.T) {
 }
 
 func TestLoadPathOverrides(t *testing.T) {
-	cfg, err := config.Load([]string{"MORNINGSTAR_DB_SOCKET_DIR=/run/ms", "MORNINGSTAR_STATE_DIR=/var/lib/ms"})
+	cfg, err := config.Load([]string{"MORNINGSTAR_DB_SOCKET_DIR=/run/ms", "MORNINGSTAR_STATE_DIR=/var/lib/ms", "MORNINGSTAR_EVIDENCE_DIR=/var/lib/ms/evidence"})
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}

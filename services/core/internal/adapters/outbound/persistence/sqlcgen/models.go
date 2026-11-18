@@ -124,6 +124,56 @@ type MorningstarBootstrapSecret struct {
 	ConsumedUserID pgtype.UUID
 }
 
+type MorningstarEvidenceIntegrityCheck struct {
+	ID             pgtype.UUID
+	EvidenceID     pgtype.UUID
+	CheckedAt      pgtype.Timestamptz
+	Trigger        string
+	Result         string
+	ObservedSha256 []byte
+	ObservedSize   *int64
+	ActorKind      string
+	ActorUserID    pgtype.UUID
+	RequestID      pgtype.UUID
+}
+
+type MorningstarEvidenceItem struct {
+	ID               pgtype.UUID
+	ProgramID        pgtype.UUID
+	AssessmentID     pgtype.UUID
+	JobID            pgtype.UUID
+	AttemptID        pgtype.UUID
+	TargetID         pgtype.UUID
+	Kind             string
+	StoreBackend     string
+	StorageKey       string
+	Sha256           []byte
+	SizeBytes        int64
+	ContentType      string
+	RedactionState   string
+	Sensitivity      string
+	CapturedAt       pgtype.Timestamptz
+	Origin           string
+	ToolKey          *string
+	ToolVersion      *string
+	ToolBinarySha256 []byte
+	OperationHash    []byte
+	DecisionID       pgtype.UUID
+	RedactedArgs     []byte
+	CreatedAt        pgtype.Timestamptz
+}
+
+type MorningstarEvidenceStatus struct {
+	EvidenceID     pgtype.UUID
+	IntegrityState string
+	LastCheckID    pgtype.UUID
+	RetentionState string
+	PurgedAt       pgtype.Timestamptz
+	PurgedBy       pgtype.UUID
+	CompromisedAt  pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type MorningstarJob struct {
 	ID                   pgtype.UUID
 	ProgramID            pgtype.UUID
