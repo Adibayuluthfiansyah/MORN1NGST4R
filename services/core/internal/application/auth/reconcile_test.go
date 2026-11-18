@@ -50,16 +50,15 @@ func newReconcileFixture(match bool) reconcileFixture {
 	h := &reconcileHasher{match: match}
 	r := &recordingRecovery{state: inbound.RecoveryState{Required: true}}
 	a := &fakeAttempts{allow: true}
-	ids := 0
 	svc := New(Deps{
 		Accounts: reconcileAccounts{}, Hasher: h, Recovery: r, Attempts: a, Audit: &fakeAudit{},
-		Random: counterRandom(), NewID: func() string { ids++; return "id" + string(rune('0'+ids)) },
+		Random: counterRandom(), NewID: newTestID,
 	})
 	return reconcileFixture{svc, h, r, a}
 }
 
 func reconcileInput(old, fresh string) inbound.ReconcileInput {
-	return inbound.ReconcileInput{Password: old, NewPassword: fresh, ConfirmRevocation: true, ClientKey: "loopback", RequestID: "r1"}
+	return inbound.ReconcileInput{Password: old, NewPassword: fresh, ConfirmRevocation: true, ClientKey: "loopback", RequestID: testRequestID}
 }
 
 // The new password is hashed only for a caller who proved the restored one.

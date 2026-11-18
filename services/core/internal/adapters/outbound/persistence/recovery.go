@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/persistence/sqlcgen"
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/audit"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/outbound"
 )
 
@@ -74,8 +75,7 @@ func (r *Recovery) InitializeFirstRun(ctx context.Context, instanceID string, be
 		if _, err := q.Exec(ctx, `INSERT INTO morningstar.recovery_state (instance_id, generation, state, last_reason) VALUES ($1, 1, 'normal', 'first_run')`, instanceID); err != nil {
 			return fmt.Errorf("persistence: insert recovery_state: %w", err)
 		}
-		if _, err := q.Exec(ctx, `INSERT INTO morningstar.audit_events (id, actor_kind, action, outcome, detail) VALUES (uuidv7(), 'system', 'system.first_run', 'success', $1::jsonb)`,
-			mustJSON(map[string]any{"generation": 1})); err != nil {
+		if err := appendEvent(ctx, q, audit.Input{Actor: audit.System(), Action: "system.first_run", Outcome: audit.Success, Detail: map[string]any{"generation": 1}}); err != nil {
 			return fmt.Errorf("persistence: audit the first run: %w", err)
 		}
 		seq, err := r.MaxAuditSeq(ctx)
@@ -223,14 +223,18 @@ func (r *Recovery) BeginReconcile(ctx context.Context, in outbound.ReconcileInpu
 
 		// The audit event and the alert are part of phase 1. When either fails the
 		// whole phase rolls back and the installation stays recovery_required.
-		detail := mustJSON(map[string]any{
-			"reason": in.Reason, "old_marker_generation": in.OldMarkerGeneration, "old_database_generation": current, "new_generation": in.NewGeneration, "counts": counts,
-		})
-		if _, err := q.Exec(ctx, `INSERT INTO morningstar.audit_events (id, actor_kind, actor_user_id, action, outcome, request_id, detail) VALUES (uuidv7(), 'user', $1, 'system.restore_recovered', 'success', $2, $3::jsonb)`,
-			in.ActorUserID, in.RequestID, detail); err != nil {
+		d := map[string]any{
+			"old_marker_generation": in.OldMarkerGeneration, "old_database_generation": current, "new_generation": in.NewGeneration, "counts": countsMap(counts),
+		}
+		actor, err := audit.User(in.ActorUserID)
+		if err != nil {
 			return fmt.Errorf("audit the reconciliation: %w", err)
 		}
-		if _, err := q.Exec(ctx, `INSERT INTO morningstar.system_alerts (id, kind, detail) VALUES (uuidv7(), 'restore_recovered', $1::jsonb)`, detail); err != nil {
+		if err := appendEvent(ctx, q, audit.Input{Actor: actor, Action: "system.restore_recovered", Outcome: audit.Success, Reason: in.Reason, RequestID: in.RequestID, Detail: d}); err != nil {
+			return fmt.Errorf("audit the reconciliation: %w", err)
+		}
+		d["reason"] = in.Reason
+		if err := insertSystemAlert(ctx, q, "restore_recovered", mustJSON(d)); err != nil {
 			return fmt.Errorf("raise the alert: %w", err)
 		}
 		return nil
@@ -258,8 +262,7 @@ func (r *Recovery) CompleteReconcile(ctx context.Context, generation uint64, rea
 		if tag.RowsAffected() != 1 {
 			return outbound.ErrRecoveryChanged
 		}
-		if _, err := q.Exec(ctx, `INSERT INTO morningstar.audit_events (id, actor_kind, action, outcome, detail) VALUES (uuidv7(), 'system', 'system.recovery_reconciled', 'success', $1::jsonb)`,
-			mustJSON(map[string]any{"generation": generation, "reason": reason})); err != nil {
+		if err := appendEvent(ctx, q, audit.Input{Actor: audit.System(), Action: "system.recovery_reconciled", Outcome: audit.Success, Reason: reason, Detail: map[string]any{"generation": generation}}); err != nil {
 			return fmt.Errorf("persistence: audit the completion: %w", err)
 		}
 		return nil

@@ -25,6 +25,12 @@ type txKey struct{}
 
 func withoutTx(ctx context.Context) context.Context { return context.WithValue(ctx, txKey{}, nil) }
 
+// inTx reports whether ctx carries a transaction.
+func inTx(ctx context.Context) bool {
+	_, ok := ctx.Value(txKey{}).(pgx.Tx)
+	return ok
+}
+
 // Querier returns the transaction that ctx carries, or the pool when there is
 // none. Every repository of this package runs its statements through it, so
 // that a call made inside Transactor.InTx joins the transaction (P-07).

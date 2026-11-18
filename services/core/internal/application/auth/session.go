@@ -144,12 +144,15 @@ func (s *Service) SessionState(ctx context.Context, c inbound.Cookies) (inbound.
 }
 
 func (s *Service) Logout(ctx context.Context, p inbound.Principal, requestID string) error {
-	return s.mapStoreError(s.Tx.InTx(ctx, func(ctx context.Context) error {
-		if _, err := s.Sessions.Revoke(ctx, p.SessionID(), p.UserID(), "logout"); err != nil {
-			return err
-		}
-		return s.auditUser(ctx, "auth.logout", p.UserID(), requestID, map[string]any{"sessionId": p.SessionID()})
-	}))
+	err := s.Tx.InTx(ctx, func(ctx context.Context) error {
+		_, err := s.Sessions.Revoke(ctx, p.SessionID(), p.UserID(), "logout")
+		return err
+	})
+	if err != nil {
+		return s.mapStoreError(err)
+	}
+	s.auditRevoked(ctx, "auth.logout", p.UserID(), requestID, map[string]any{"sessionId": p.SessionID()})
+	return nil
 }
 
 func view(r outbound.SessionRecord, current string) inbound.SessionView {
@@ -192,7 +195,11 @@ func (s *Service) RevokeSession(ctx context.Context, p inbound.Principal, sessio
 			return inbound.ErrConflictState
 		}
 		out = view(rec, p.SessionID())
-		return s.auditUser(ctx, "auth.session_revoked", p.UserID(), requestID, map[string]any{"sessionId": sessionID})
+		return nil
 	})
-	return out, s.mapStoreError(err)
+	if err != nil {
+		return out, s.mapStoreError(err)
+	}
+	s.auditRevoked(ctx, "auth.session_revoked", p.UserID(), requestID, map[string]any{"sessionId": sessionID})
+	return out, nil
 }

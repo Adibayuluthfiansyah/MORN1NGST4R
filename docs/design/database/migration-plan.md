@@ -31,6 +31,7 @@ Status: design proposal. This is a specification. No migration file exists or is
 | 00013 | `operational_indexes` | M3 and later slices | the table slices | yes | none |
 | 00014 | `integrity_triggers` | M3 and later slices | 00013 | yes | none |
 | 00015 | `grants` | M3 and later slices | 00014 | yes | none |
+| 00016 | `audit_sink` | M5 | 00015 | yes | none |
 
 ## Detail per migration
 
@@ -187,6 +188,16 @@ Status: design proposal. This is a specification. No migration file exists or is
 - Depends on: 00014
 - Forward behavior: creates the objects above inside one transaction. Fails closed on an existing object (no `IF NOT EXISTS`, DB-22).
 - Rollback consideration: Revoke grants (then nothing works).
+
+### 00016 `audit_sink`
+
+- Purpose: The anonymous actor kind and one open audit alert (M5, TD-M4-03, T-52).
+- Milestone: M5
+- Tables created: none
+- Other objects: `audit_events_ck_c2` replaced by a check that also accepts `anonymous`. The unique partial index `system_alerts_one_open_audit_alert`.
+- Depends on: 00015
+- Forward behavior: runs in one transaction. Rows written before it keep their actor kind, because audit rows are append-only.
+- Rollback consideration: none. Migrations are forward only.
 
 ## Grants matrix (migration 00015)
 

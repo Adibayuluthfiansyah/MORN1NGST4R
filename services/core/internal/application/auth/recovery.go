@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/audit"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/identity"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/inbound"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/outbound"
@@ -30,11 +31,11 @@ func (s *Service) ResetPassword(ctx context.Context, in inbound.RecoveryResetInp
 		return inbound.RecoveryResetResult{}, s.mapStoreError(err)
 	}
 	if !allowed {
-		s.auditDenied(ctx, "auth.recovery_reset", in.RequestID, map[string]any{"reason": "rate_limited"})
+		s.auditDenied(ctx, audit.Anonymous(), "auth.recovery_reset", in.RequestID, "rate_limited")
 		return inbound.RecoveryResetResult{}, rateLimited()
 	}
 	deny := func() (inbound.RecoveryResetResult, error) {
-		s.auditDenied(ctx, "auth.recovery_reset", in.RequestID, map[string]any{"reason": "recovery_invalid"})
+		s.auditDenied(ctx, audit.Anonymous(), "auth.recovery_reset", in.RequestID, "recovery_invalid")
 		return inbound.RecoveryResetResult{}, inbound.ErrRecoveryInvalid
 	}
 
@@ -134,7 +135,7 @@ func (s *Service) Reconcile(ctx context.Context, in inbound.ReconcileInput) (inb
 		return inbound.ReconcileResult{}, s.mapStoreError(err)
 	}
 	if !allowed {
-		s.auditDenied(ctx, "system.recovery_reconciled", in.RequestID, map[string]any{"reason": "rate_limited"})
+		s.auditDenied(ctx, audit.Anonymous(), "system.recovery_reconciled", in.RequestID, "rate_limited")
 		return inbound.ReconcileResult{}, rateLimited()
 	}
 	match, err := s.verifyPassword(ctx, user, found, in.Password)
@@ -142,7 +143,7 @@ func (s *Service) Reconcile(ctx context.Context, in inbound.ReconcileInput) (inb
 		return inbound.ReconcileResult{}, err
 	}
 	if !match {
-		s.auditDenied(ctx, "system.recovery_reconciled", in.RequestID, map[string]any{"reason": "invalid_credentials"})
+		s.auditDenied(ctx, audit.Anonymous(), "system.recovery_reconciled", in.RequestID, "invalid_credentials")
 		return inbound.ReconcileResult{}, inbound.ErrInvalidCredentials
 	}
 	phc, err := s.Hasher.Hash(ctx, in.NewPassword)

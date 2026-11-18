@@ -4,7 +4,6 @@ package request
 import (
 	"crypto/rand"
 	"fmt"
-	"regexp"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,12 +17,6 @@ const HeaderID = "X-Request-Id"
 // the request-id middleware assigned an identifier, so that the response and
 // the log still carry a well-formed id.
 const UnknownID = "00000000-0000-0000-0000-000000000000"
-
-var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-
-// ValidID reports whether s is a canonical UUID string. A caller supplied
-// request id that is not one is replaced, never echoed.
-func ValidID(s string) bool { return uuidPattern.MatchString(s) }
 
 // NewID returns a random (version 4) UUID.
 func NewID() string {

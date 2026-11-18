@@ -151,36 +151,6 @@ func (q *Queries) FindSession(ctx context.Context, arg FindSessionParams) (FindS
 	return i, err
 }
 
-const insertAuditEvent = `-- name: InsertAuditEvent :exec
-INSERT INTO morningstar.audit_events (id, actor_kind, actor_user_id, actor_ref, action, outcome, request_id, detail)
-VALUES ($1::uuid, $2, $6::uuid, $7::text, $3, $4, $8::uuid, $5::jsonb)
-`
-
-type InsertAuditEventParams struct {
-	Column1     pgtype.UUID
-	ActorKind   string
-	Action      string
-	Outcome     string
-	Column5     []byte
-	ActorUserID pgtype.UUID
-	ActorRef    *string
-	RequestID   pgtype.UUID
-}
-
-func (q *Queries) InsertAuditEvent(ctx context.Context, arg InsertAuditEventParams) error {
-	_, err := q.db.Exec(ctx, insertAuditEvent,
-		arg.Column1,
-		arg.ActorKind,
-		arg.Action,
-		arg.Outcome,
-		arg.Column5,
-		arg.ActorUserID,
-		arg.ActorRef,
-		arg.RequestID,
-	)
-	return err
-}
-
 const insertBootstrapSecret = `-- name: InsertBootstrapSecret :exec
 INSERT INTO morningstar.bootstrap_secrets (id, secret_hash) VALUES ($1::uuid, $2)
 `

@@ -7,7 +7,7 @@
 | Product | MORN1NGST4R (canonical technical name `morningstar`) |
 | Document | Product Requirements Document |
 | Version | 0.2 |
-| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold, the M1 scope package, the M2 policy and approval domain, the M3 persistence layer (PostgreSQL schema, atomic approval consumption, recovery generation, database readiness probe) and the M4 authentication and session layer (one account, Argon2id, server-side sessions, CSRF, Host and Origin checks, login rate limit, bootstrap secret, recovery code, re-authentication grants, recovery gating). |
+| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold, the M1 scope package, the M2 policy and approval domain, the M3 persistence layer (PostgreSQL schema, atomic approval consumption, recovery generation, database readiness probe), the M4 authentication and session layer (one account, Argon2id, server-side sessions, CSRF, Host and Origin checks, login rate limit, bootstrap secret, recovery code, re-authentication grants, recovery gating) and the M5 audit event model and sink (the audit domain, the `AuditSink` port, the PostgreSQL adapter with bounded retries and a persistent alert). |
 | Last updated | 2026-11-16 |
 | Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. The M1 scope package (`services/core/internal/domain/scope`) implements the parsing and evaluation core of FR-SCOPE-001 and FR-SCOPE-002 for names and literals. Nothing uses it yet, so neither requirement is met end to end. The M2 packages (`internal/domain/actor`, `operation`, `approval` and the decision function `scope.Decide`) implement the pure domain part of FR-POLICY-001, FR-APPROVAL-001 to FR-APPROVAL-004 and FR-APPROVAL-006: the approval record and its lifecycle, the consumption state machine, the operation hash, the class derivation and the authorization value. M3 adds the PostgreSQL schema, the atomic consumption of approval uses and the recovery generation, but no use case and no worker call them yet, so none of these requirements is met end to end. M4 implements FR-AUTH-001 and the server side of FR-AUTH-002 and FR-APPROVAL-005 (the re-authentication grant, not the approval use case, which is M19). No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
 | Owner | The project owner (single decision authority) |
@@ -622,7 +622,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 Each call has an audit event without the content. AC2 A proposal accepted by a human records the proposing provider.
 - **Dependencies:** FR-AUDIT-001.
 - **Security:** T-53.
-- **MVP status:** Planned (M5, M12).
+- **MVP status:** M5 defines and tests the event shape of an AI transmission (provider, size and SHA-256 of the content, no content field, `TestAITransmissionDetailCarriesNoContent`). Planned: M12 (the producer) and the milestone that records the proposing provider of an accepted proposal (AC2).
 - **Source:** Decided. `SEC 5`, `SEC 13`.
 
 #### FR-AI-005 Basic AI-assisted analysis
@@ -686,7 +686,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 An operation does not start when the audit write fails. AC2 Revocation still takes effect when audit is down. AC3 The runtime database role cannot update or delete audit rows. AC4 Audit retries are bounded and exhaustion raises a persistent alert.
 - **Dependencies:** M3.
 - **Security:** T-51, T-52. Same-user processes can connect as another database role under peer authentication (T-61).
-- **MVP status:** Planned (M5).
+- **MVP status:** M5 implements and tests AC1 to AC4 for the operations that exist today (the authentication use case): a required record that fails rolls the operation back, a denial and a revocation still take effect, the runtime role cannot change a record, and exhausted retries raise one persistent alert that survives a restart. The retry bound is provisional and waits for the owner (gate G2). The use cases that start jobs and approvals call the same sink in M7, M19 and M21 (TD-M5-01).
 - **Source:** Decided requirement. `SEC 13`, D-12, D-23, D-48. The hash chain is deferred and accepted (D-78).
 
 #### FR-CRED-001 Credential protection

@@ -32,7 +32,7 @@ Status: design proposal. Decision IDs refer to `README.md`. Numbers marked propo
 
 ## Request identifiers (API-13)
 
-`X-Request-Id` (UUID) in and out. The id is in every error body, every audit event and every log line of the request.
+`X-Request-Id` (UUID) out only. The server generates it and ignores a value that the client sends (M5). The id is in every error body, every audit event and every log line of the request.
 
 ## Validation behavior
 

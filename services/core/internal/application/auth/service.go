@@ -14,12 +14,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/audit"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/inbound"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/outbound"
 )
-
-// auditTimeout bounds the write of a denial that outlives its request.
-const auditTimeout = 5 * time.Second
 
 type Deps struct {
 	Hasher        outbound.PasswordHasher
@@ -29,7 +27,7 @@ type Deps struct {
 	Sessions      outbound.SessionStore
 	Reauth        outbound.ReauthStore
 	Attempts      outbound.AttemptStore
-	Audit         outbound.AuditLog
+	Audit         outbound.AuditSink
 	SecretFile    outbound.BootstrapSecretFile
 	Tx            outbound.Transactor
 	Recovery      inbound.Recovery
@@ -42,7 +40,8 @@ type Deps struct {
 
 type Service struct {
 	Deps
-	anonKey []byte
+	anonKey  []byte
+	throttle *audit.Coalescer
 }
 
 var (
@@ -69,7 +68,7 @@ func New(d Deps) *Service {
 			return b
 		}
 	}
-	return &Service{Deps: d, anonKey: d.Random(32)}
+	return &Service{Deps: d, anonKey: d.Random(32), throttle: audit.NewCoalescer(attemptWindow, d.Now)}
 }
 
 func (s *Service) Gate() inbound.Gate {
@@ -93,23 +92,72 @@ func (s *Service) mapStoreError(err error) error {
 	return err
 }
 
-// auditDenied records a refusal in its own transaction, so that a rollback of
-// the request cannot erase it (P-33a). A failure to write it is logged and does
-// not turn the refusal into a success.
-func (s *Service) auditDenied(ctx context.Context, action, requestID string, detail map[string]any) {
-	// A client that disconnects while a hash runs cancels the request context.
-	// The denial must still be recorded, so the write is detached from the
-	// request and bounded in time.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), auditTimeout)
-	defer cancel()
-	e := outbound.AuditEvent{ActorKind: "system", ActorRef: "anonymous", Action: action, Outcome: "denied", RequestID: requestID, Detail: detail}
-	if err := s.Audit.Append(ctx, e); err != nil {
-		s.Logger.Error("auth: a denial could not be audited", "action", action)
+// auditDenied records a refusal on its own, so that the rollback of the request
+// cannot erase it (P-33a). Whatever happens to the write, the refusal stands.
+// Repeated rate-limited refusals of one action are coalesced (TD-M4-03): the
+// first is recorded, the next ones are counted until the attempt window has
+// passed, and the next record reports the count. A refusal for a wrong
+// credential is never coalesced.
+func (s *Service) auditDenied(ctx context.Context, who audit.Actor, action, requestID, reason string) {
+	var detail map[string]any
+	if reason == "rate_limited" {
+		record, suppressed := s.throttle.Admit(action)
+		if !record {
+			return
+		}
+		if suppressed > 0 {
+			detail = map[string]any{"suppressed": suppressed}
+		}
+	}
+	suppressed, _ := detail["suppressed"].(int)
+	e, err := audit.New(s.NewID(), audit.Input{Actor: who, Action: action, Outcome: audit.Denied, Reason: reason, RequestID: requestID, Detail: detail})
+	if err == nil {
+		err = s.Audit.Record(ctx, e)
+	} else {
+		s.Logger.Error("auth: a denial could not be built as an audit event", "action", action)
+	}
+	if err != nil && reason == "rate_limited" {
+		s.throttle.Retract(action, suppressed)
 	}
 }
 
+// userActor is the audit actor of an authenticated request.
+func userActor(p inbound.Principal) audit.Actor {
+	a, err := audit.FromActor(p.Actor())
+	if err != nil {
+		return audit.Anonymous()
+	}
+	return a
+}
+
+// auditUser is the record that a change needs before it may commit. Inside the
+// transaction of the change it joins it, so a failed write rolls the change back.
 func (s *Service) auditUser(ctx context.Context, action, userID, requestID string, detail map[string]any) error {
-	return s.Audit.Append(ctx, outbound.AuditEvent{ActorKind: "user", ActorUserID: userID, Action: action, Outcome: "success", RequestID: requestID, Detail: detail})
+	who, err := audit.User(userID)
+	if err != nil {
+		return err
+	}
+	e, err := audit.New(s.NewID(), audit.Input{Actor: who, Action: action, Outcome: audit.Success, RequestID: requestID, Detail: detail})
+	if err != nil {
+		return err
+	}
+	return s.Audit.Require(ctx, e)
+}
+
+// auditRevoked records a revocation that has already taken effect. A revocation
+// must work when audit cannot be written (SEC 13), so it is recorded after its
+// commit and its outcome does not change the answer.
+func (s *Service) auditRevoked(ctx context.Context, action, userID, requestID string, detail map[string]any) {
+	who, err := audit.User(userID)
+	if err != nil {
+		return
+	}
+	e, err := audit.New(s.NewID(), audit.Input{Actor: who, Action: action, Outcome: audit.Success, RequestID: requestID, Detail: detail})
+	if err != nil {
+		s.Logger.Error("auth: a revocation could not be built as an audit event", "action", action)
+		return
+	}
+	_ = s.Audit.Record(ctx, e)
 }
 
 func validationError(fields ...inbound.FieldError) error {

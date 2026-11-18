@@ -120,7 +120,3 @@ WHERE attempted_at > now() - make_interval(secs => sqlc.arg(window_secs)::float8
 -- name: InsertLoginAttempt :exec
 INSERT INTO morningstar.login_attempts (id, kind, user_id, source_key, succeeded)
 VALUES ($1::uuid, $2, sqlc.narg(user_id)::uuid, $3, $4);
-
--- name: InsertAuditEvent :exec
-INSERT INTO morningstar.audit_events (id, actor_kind, actor_user_id, actor_ref, action, outcome, request_id, detail)
-VALUES ($1::uuid, $2, sqlc.narg(actor_user_id)::uuid, sqlc.narg(actor_ref)::text, $3, $4, sqlc.narg(request_id)::uuid, $5::jsonb);

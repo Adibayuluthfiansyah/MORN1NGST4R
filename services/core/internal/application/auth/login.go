@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/audit"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/identity"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/inbound"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/outbound"
@@ -52,7 +53,7 @@ func (s *Service) Login(ctx context.Context, in inbound.LoginInput) (inbound.Log
 		return inbound.LoginResult{}, s.mapStoreError(err)
 	}
 	if !allowed {
-		s.auditDenied(ctx, "auth.login", in.RequestID, map[string]any{"reason": "rate_limited"})
+		s.auditDenied(ctx, audit.Anonymous(), "auth.login", in.RequestID, "rate_limited")
 		return inbound.LoginResult{}, rateLimited()
 	}
 	ok, err := s.verifyPassword(ctx, user, known, in.Password)
@@ -60,7 +61,7 @@ func (s *Service) Login(ctx context.Context, in inbound.LoginInput) (inbound.Log
 		return inbound.LoginResult{}, err
 	}
 	if !ok {
-		s.auditDenied(ctx, "auth.login", in.RequestID, map[string]any{"reason": "invalid_credentials"})
+		s.auditDenied(ctx, audit.Anonymous(), "auth.login", in.RequestID, "invalid_credentials")
 		return inbound.LoginResult{}, inbound.ErrInvalidCredentials
 	}
 
@@ -107,7 +108,7 @@ func (s *Service) Reauthenticate(ctx context.Context, p inbound.Principal, in in
 		return inbound.ReauthGrant{}, s.mapStoreError(err)
 	}
 	if !allowed {
-		s.auditDenied(ctx, "auth.reauthenticated", in.RequestID, map[string]any{"reason": "rate_limited"})
+		s.auditDenied(ctx, userActor(p), "auth.reauthenticated", in.RequestID, "rate_limited")
 		return inbound.ReauthGrant{}, rateLimited()
 	}
 	match, err := s.verifyPassword(ctx, user, found, in.Password)
@@ -115,7 +116,7 @@ func (s *Service) Reauthenticate(ctx context.Context, p inbound.Principal, in in
 		return inbound.ReauthGrant{}, err
 	}
 	if !match {
-		s.auditDenied(ctx, "auth.reauthenticated", in.RequestID, map[string]any{"reason": "invalid_credentials"})
+		s.auditDenied(ctx, userActor(p), "auth.reauthenticated", in.RequestID, "invalid_credentials")
 		return inbound.ReauthGrant{}, inbound.ErrInvalidCredentials
 	}
 	var out inbound.ReauthGrant
@@ -177,7 +178,7 @@ func (s *Service) ChangePassword(ctx context.Context, p inbound.Principal, in in
 		return inbound.IssuedSession{}, s.mapStoreError(err)
 	}
 	if !allowed {
-		s.auditDenied(ctx, "auth.password_changed", in.RequestID, map[string]any{"reason": "rate_limited"})
+		s.auditDenied(ctx, userActor(p), "auth.password_changed", in.RequestID, "rate_limited")
 		return inbound.IssuedSession{}, rateLimited()
 	}
 	match, err := s.verifyPassword(ctx, user, true, in.CurrentPassword)
@@ -185,7 +186,7 @@ func (s *Service) ChangePassword(ctx context.Context, p inbound.Principal, in in
 		return inbound.IssuedSession{}, err
 	}
 	if !match {
-		s.auditDenied(ctx, "auth.password_changed", in.RequestID, map[string]any{"reason": "invalid_credentials"})
+		s.auditDenied(ctx, userActor(p), "auth.password_changed", in.RequestID, "invalid_credentials")
 		return inbound.IssuedSession{}, inbound.ErrInvalidCredentials
 	}
 	phc, err := s.Hasher.Hash(ctx, in.NewPassword)
@@ -216,7 +217,7 @@ func (s *Service) ChangePassword(ctx context.Context, p inbound.Principal, in in
 		return s.auditUser(ctx, "auth.password_changed", p.UserID(), in.RequestID, nil)
 	})
 	if errors.Is(err, inbound.ErrReauthInvalid) {
-		s.auditDenied(ctx, "auth.password_changed", in.RequestID, map[string]any{"reason": "reauth_invalid"})
+		s.auditDenied(ctx, userActor(p), "auth.password_changed", in.RequestID, "reauth_invalid")
 	}
 	return out, s.mapStoreError(err)
 }

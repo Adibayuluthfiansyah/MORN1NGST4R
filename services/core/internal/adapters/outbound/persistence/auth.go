@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,7 +31,6 @@ type (
 	RecoveryCodes struct{ base }
 	Sessions      struct{ base }
 	Reauth        struct{ base }
-	Audit         struct{ base }
 	Attempts      struct {
 		base
 		tx *Transactor
@@ -46,7 +44,6 @@ var (
 	_ outbound.SessionStore      = Sessions{}
 	_ outbound.ReauthStore       = Reauth{}
 	_ outbound.AttemptStore      = Attempts{}
-	_ outbound.AuditLog          = Audit{}
 )
 
 func (d *DB) Accounts() outbound.AccountStore           { return Accounts{base{d.pool}} }
@@ -54,7 +51,6 @@ func (d *DB) Bootstraps() outbound.BootstrapStore       { return Bootstraps{base
 func (d *DB) RecoveryCodes() outbound.RecoveryCodeStore { return RecoveryCodes{base{d.pool}} }
 func (d *DB) Sessions() outbound.SessionStore           { return Sessions{base{d.pool}} }
 func (d *DB) Reauth() outbound.ReauthStore              { return Reauth{base{d.pool}} }
-func (d *DB) Audit() outbound.AuditLog                  { return Audit{base{d.pool}} }
 func (d *DB) Attempts() outbound.AttemptStore {
 	return Attempts{base{d.pool}, NewTransactor(d.pool)}
 }
@@ -472,33 +468,4 @@ func (a Attempts) insert(ctx context.Context, kind outbound.AttemptKind, sourceK
 		return err
 	}
 	return a.q(ctx).InsertLoginAttempt(ctx, sqlcgen.InsertLoginAttemptParams{Column1: id, Kind: string(kind), SourceKey: sourceKey, Succeeded: ok, UserID: uid})
-}
-
-func (a Audit) Append(ctx context.Context, e outbound.AuditEvent) error {
-	id, err := uuidOf(ids.New())
-	if err != nil {
-		return err
-	}
-	uid, err := uuidOrNull(e.ActorUserID)
-	if err != nil {
-		return err
-	}
-	req, err := uuidOrNull(e.RequestID)
-	if err != nil {
-		return err
-	}
-	var ref *string
-	if e.ActorRef != "" {
-		ref = &e.ActorRef
-	}
-	detail := []byte("{}")
-	if e.Detail != nil {
-		if detail, err = json.Marshal(e.Detail); err != nil {
-			return wrap("encode the audit detail", err)
-		}
-	}
-	return wrap("append the audit event", a.q(ctx).InsertAuditEvent(ctx, sqlcgen.InsertAuditEventParams{
-		Column1: id, ActorKind: e.ActorKind, Action: e.Action, Outcome: e.Outcome, Column5: detail,
-		ActorUserID: uid, ActorRef: ref, RequestID: req,
-	}))
 }

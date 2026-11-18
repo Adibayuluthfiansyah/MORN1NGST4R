@@ -123,8 +123,11 @@ func TestLoginRateLimitCannotBeBypassedByVariations(t *testing.T) {
 	if got := a.scalar(`SELECT count(*) FROM morningstar.login_attempts WHERE kind = 'login' AND NOT succeeded`); got != "5" {
 		t.Errorf("%s failed attempts recorded, want exactly 5 (the refused ones must not be hashed or recorded as admitted)", got)
 	}
-	if got := a.scalar(`SELECT count(*) FROM morningstar.audit_events WHERE action = 'auth.login' AND outcome = 'denied' AND detail->>'reason' = 'rate_limited'`); got != "7" {
-		t.Errorf("%s rate-limit refusals are audited, want 7", got)
+	if got := a.scalar(`SELECT count(*) FROM morningstar.audit_events WHERE action = 'auth.login' AND outcome = 'denied' AND detail->>'reason' = 'rate_limited'`); got != "1" {
+		t.Errorf("%s rate-limit refusals are audited, want one record for the whole burst (TD-M4-03)", got)
+	}
+	if got := a.scalar(`SELECT count(*) FROM morningstar.audit_events WHERE action = 'auth.login' AND outcome = 'denied' AND detail->>'reason' = 'invalid_credentials'`); got != "5" {
+		t.Errorf("%s wrong-password refusals are audited, want 5: they are never coalesced", got)
 	}
 }
 

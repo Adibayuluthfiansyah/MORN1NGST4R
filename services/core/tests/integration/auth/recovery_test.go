@@ -391,4 +391,9 @@ func TestReconcileSetsTheNewPasswordAndKeepsTheOldOneOnRefusal(t *testing.T) {
 	if a.scalar(`SELECT count(*) FROM morningstar.audit_events WHERE action = 'system.restore_recovered' AND outcome = 'success'`) != "1" {
 		t.Error("the reconciliation was not audited")
 	}
+	// Every count of the event is a number: no key of the counts looks like a
+	// secret to the redaction (the review of M5).
+	if got := a.scalar(`SELECT count(*) FILTER (WHERE jsonb_typeof(c.value) <> 'number') || '/' || count(*) FROM morningstar.audit_events e, jsonb_each(e.detail->'counts') c WHERE e.action = 'system.restore_recovered'`); !strings.HasPrefix(got, "0/") || got == "0/0" {
+		t.Errorf("non-numeric/all counts of the event = %s", got)
+	}
 }

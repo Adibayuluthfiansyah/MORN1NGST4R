@@ -26,6 +26,7 @@ import (
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/health"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/recovery"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/config"
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/audit"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/infrastructure/ids"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/infrastructure/logging"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/outbound"
@@ -48,6 +49,17 @@ const (
 	// is down at start.
 	recoveryRetryInterval = 5 * time.Second
 )
+
+// auditRetryPolicy is the bound on the retries of an audit write (SEC 13, D-48).
+// PROVISIONAL: the design says the bound is "set by security policy" and gives
+// no number (threat-model C-33, gate G2), so these values wait for the owner's
+// decision. Three attempts follow the default of D-30 for job attempts. The
+// worst case of one write is 3.5 seconds. Changing them changes only this value.
+var auditRetryPolicy = audit.RetryPolicy{
+	MaxAttempts:    3,
+	Delays:         []time.Duration{100 * time.Millisecond, 400 * time.Millisecond},
+	AttemptTimeout: time.Second,
+}
 
 // Server is the composed HTTP server process.
 type Server struct {
@@ -115,9 +127,14 @@ func NewServer(cfg config.Config, logOut io.Writer, opts ...ServerOption) (*Serv
 			db.Close()
 			return nil, fmt.Errorf("password hashing: %w", err)
 		}
+		sink, err := db.AuditSink(auditRetryPolicy, logger)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("audit sink: %w", err)
+		}
 		auth = authapp.New(authapp.Deps{
 			Hasher: hasher, Accounts: db.Accounts(), Bootstraps: db.Bootstraps(), RecoveryCodes: db.RecoveryCodes(),
-			Sessions: db.Sessions(), Reauth: db.Reauth(), Attempts: db.Attempts(), Audit: db.Audit(),
+			Sessions: db.Sessions(), Reauth: db.Reauth(), Attempts: db.Attempts(), Audit: sink,
 			SecretFile: bootstrapfile.New(cfg.Auth.RuntimeDir), Tx: db.Transactor(), Recovery: rec,
 			NewID: ids.New, Now: time.Now, Logger: logger,
 		})

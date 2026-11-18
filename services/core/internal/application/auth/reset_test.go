@@ -40,7 +40,7 @@ func (directTx) InTx(ctx context.Context, fn func(context.Context) error) error 
 func resetWith(markErr error) error {
 	s := New(Deps{
 		Accounts: resetAccounts{}, RecoveryCodes: resetCodes{markErr: markErr}, Hasher: resetHasher{},
-		Attempts: &fakeAttempts{allow: true}, Audit: &fakeAudit{}, Tx: directTx{}, Random: counterRandom(),
+		Attempts: &fakeAttempts{allow: true}, Audit: &fakeAudit{}, Tx: directTx{}, Random: counterRandom(), NewID: newTestID,
 	})
 	shown, _, _ := identity.FormatRecoveryCode(counterRandom()(identity.RecoveryCodeBytes))
 	_, err := s.ResetPassword(context.Background(), inbound.RecoveryResetInput{RecoveryCode: shown, NewPassword: "a long new passphrase 42", ClientKey: "loopback"})

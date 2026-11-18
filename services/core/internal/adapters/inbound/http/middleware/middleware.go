@@ -14,15 +14,12 @@ import (
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/inbound/http/response"
 )
 
-// RequestID assigns the request id (API-13). A valid caller supplied id is
-// kept. Anything else is replaced.
+// RequestID assigns the request id (API-13). The server makes it: the id is the
+// correlation id of the audit trail, so a value that the caller sends is never
+// kept and never echoed (TD-M4-03).
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := c.GetHeader(request.HeaderID)
-		if !request.ValidID(id) {
-			id = request.NewID()
-		}
-		request.SetID(c, strings.ToLower(id))
+		request.SetID(c, request.NewID())
 		c.Header(request.HeaderID, request.ID(c))
 		c.Next()
 	}

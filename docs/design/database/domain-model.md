@@ -131,6 +131,8 @@ Restore detection uses an external marker file and the `recovery_state` row. The
 
 Every state-changing endpoint writes exactly one event with its action name, outcome `success`, `denied` or `failure`. Worker and system events are listed after the endpoint events. Read-only calls are not audited, except evidence content and report exports (`evidence.accessed`, `report.exported`) (DQ-13).
 
+**How events are written (M5, FR-AUDIT-001, SEC 13).** One port writes them, `AuditSink`, with two semantics. `Require` is the record that an operation needs before it may start: inside the transaction of the operation it joins it, so a failed write rolls the operation back. `Record` is for an event whose operation has already taken effect or been denied (a denial, a cancellation, a revocation): it commits on its own, is retried within a bound and never changes the outcome of the operation. When the retries are exhausted the sink raises one persistent alert (`system_alerts`, kind `audit_retry_exhausted`), and `Gate` denies new operations until a human clears it. An alert that cannot be stored is kept in memory and `Gate` keeps denying until it is. The retry bound is provisional (3 attempts, waits of 100 and 400 ms, 1 second per attempt) and waits for the owner. The correlation id (`request_id`) is made by the server and a value that the caller sends is ignored. An unauthenticated caller is the actor kind `anonymous`. The refusals of one action for rate limiting are recorded once per attempt window (15 minutes) with a count of the refusals that the window suppressed. Refusals for a wrong credential are never coalesced. The fields of a scope evaluation (D-91) are in the detail: `decision`, `reasons` and `decidingRuleId` (null when no rule decided). An AI transmission (`ai.transmission`) carries `provider`, `bytes` and `contentDigest` and no content.
+
 | Action | Source | Meaning |
 | --- | --- | --- |
 | `ai.provider_configured` | AI-02 | state change through the API |
@@ -215,6 +217,7 @@ Every state-changing endpoint writes exactly one event with its action name, out
 | `finding.auto_created` | WRK-04 | Automated Candidate |
 | `finding.auto_submitted` | WRK-04 | Automated Needs Review |
 | `ai.transmission` | WRK-09 | Provider, program, size, digest |
+| `system.first_run` | start-up | The first run created the recovery state and the marker (M3). Added to the catalog in M5 because the code wrote it before the catalog listed it |
 | `system.recovery_detected` | start-up | A restore or a marker problem was detected, the installation is in recovery_required |
 | `audit.retry_exhausted` | audit sink | Persistent alert raised, new operations denied (D-48) |
 | `system.restore_recovered` | AUTH-10 | Authority recorded in the restored database was revoked (DB-27, DB-28) |

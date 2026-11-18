@@ -259,14 +259,12 @@ func TestRequestID(t *testing.T) {
 		t.Errorf("two requests got the same id %q", generated)
 	}
 
-	if got := h.do(http.MethodGet, "/api/v1/health/live", "127.0.0.1:8080", map[string]string{"X-Request-Id": valid}).Header().Get("X-Request-Id"); got != valid {
-		t.Errorf("valid caller id: got %q, want %q echoed", got, valid)
-	}
-
-	for _, bad := range []string{"abc", "not-a-uuid-at-all-but-36-characters-xx", strings.Repeat("a", 500), "018f0000-0000-7000-8000-00000000000g", " " + valid} {
-		got := h.do(http.MethodGet, "/api/v1/health/live", "127.0.0.1:8080", map[string]string{"X-Request-Id": bad}).Header().Get("X-Request-Id")
-		if got == bad || !uuidPattern.MatchString(got) {
-			t.Errorf("caller id %q: got %q, want a freshly generated UUID", bad, got)
+	// The id is the correlation id of the audit trail (TD-M4-03), so the server
+	// makes it. A caller supplied id is never kept, valid or not.
+	for _, supplied := range []string{valid, strings.ToUpper(valid), "abc", "not-a-uuid-at-all-but-36-characters-xx", strings.Repeat("a", 500), "018f0000-0000-7000-8000-00000000000g", " " + valid} {
+		got := h.do(http.MethodGet, "/api/v1/health/live", "127.0.0.1:8080", map[string]string{"X-Request-Id": supplied}).Header().Get("X-Request-Id")
+		if strings.EqualFold(got, supplied) || !uuidPattern.MatchString(got) {
+			t.Errorf("caller id %q: got %q, want a freshly generated UUID", supplied, got)
 		}
 	}
 }

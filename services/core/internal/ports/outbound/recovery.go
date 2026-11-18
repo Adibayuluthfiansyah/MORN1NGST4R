@@ -106,8 +106,8 @@ type ReconcileCounts struct {
 	JobsCancelled        int `json:"jobs_cancelled"`
 	JobsStopRequested    int `json:"jobs_stop_requested"`
 	AttemptsLost         int `json:"attempts_lost"`
-	RecoveryCodesRevoked int `json:"recovery_codes_revoked"`
-	BootstrapExpired     int `json:"bootstrap_secrets_expired"`
+	RecoveryCodesRevoked int `json:"codes_invalidated"`
+	BootstrapExpired     int `json:"bootstrap_expired"`
 }
 
 // ErrRecoveryChanged is returned when the recovery_state row is not the one the
