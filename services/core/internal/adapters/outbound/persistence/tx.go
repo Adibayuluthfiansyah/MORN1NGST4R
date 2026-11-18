@@ -23,6 +23,8 @@ type DBTX interface {
 
 type txKey struct{}
 
+func withoutTx(ctx context.Context) context.Context { return context.WithValue(ctx, txKey{}, nil) }
+
 // Querier returns the transaction that ctx carries, or the pool when there is
 // none. Every repository of this package runs its statements through it, so
 // that a call made inside Transactor.InTx joins the transaction (P-07).

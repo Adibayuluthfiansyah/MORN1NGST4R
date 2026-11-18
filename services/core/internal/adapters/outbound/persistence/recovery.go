@@ -107,7 +107,8 @@ func countQuery(ctx context.Context, q DBTX, sql string, args ...any) (int, erro
 // BeginReconcile is phase 1 of the reconciliation (section 6).
 func (r *Recovery) BeginReconcile(ctx context.Context, in outbound.ReconcileInput) (outbound.ReconcileCounts, error) {
 	if !validUUID(in.ActorUserID) || !validUUID(in.RequestID) || !validUUID(in.InstanceID) ||
-		in.NewGeneration < 1 || in.NewGeneration > maxGeneration || !allowedReasons[in.Reason] {
+		in.NewGeneration < 1 || in.NewGeneration > maxGeneration || !allowedReasons[in.Reason] ||
+		(in.RecoveryCodeHash != "") != validUUID(in.RecoveryCodeID) {
 		return outbound.ReconcileCounts{}, errors.New("persistence: the reconciliation input is invalid")
 	}
 	var counts outbound.ReconcileCounts
@@ -179,6 +180,8 @@ func (r *Recovery) BeginReconcile(ctx context.Context, in outbound.ReconcileInpu
 					INSERT INTO morningstar.assessment_transitions (id, assessment_id, from_status, to_status, actor_user_id, reason, request_id)
 					SELECT uuidv7(), id, 'running', 'paused', $1, 'recovery_reset', $2 FROM a)
 				SELECT count(*) FROM a`, []any{in.ActorUserID, in.RequestID}},
+			{&counts.RecoveryCodesRevoked, "recovery codes", `WITH x AS (UPDATE morningstar.recovery_codes SET revoked_at = now() WHERE used_at IS NULL AND revoked_at IS NULL RETURNING 1) SELECT count(*) FROM x`, nil},
+			{&counts.BootstrapExpired, "bootstrap secrets", `WITH x AS (UPDATE morningstar.bootstrap_secrets SET superseded_at = now() WHERE consumed_at IS NULL AND superseded_at IS NULL RETURNING 1) SELECT count(*) FROM x`, nil},
 			{&counts.RawCaptureCleared, "raw evidence capture", `WITH x AS (UPDATE morningstar.assessments SET raw_evidence_capture = false, updated_at = now(), version = version + 1 WHERE raw_evidence_capture RETURNING 1) SELECT count(*) FROM x`, nil},
 			{&counts.JobsCancelled, "queued jobs", `
 				WITH j AS (
@@ -198,6 +201,24 @@ func (r *Recovery) BeginReconcile(ctx context.Context, in outbound.ReconcileInpu
 				return fmt.Errorf("invalidate %s: %w", s.name, err)
 			}
 			*s.dst = n
+		}
+
+		if in.NewPasswordHash != "" {
+			if _, err := q.Exec(ctx, `UPDATE morningstar.user_credentials SET is_current = false, superseded_at = now() WHERE user_id = $1 AND is_current`, in.ActorUserID); err != nil {
+				return fmt.Errorf("supersede the restored password: %w", err)
+			}
+			if _, err := q.Exec(ctx, `INSERT INTO morningstar.user_credentials (id, user_id, phc_hash) VALUES ($1, $2, $3)`, in.NewCredentialID, in.ActorUserID, in.NewPasswordHash); err != nil {
+				return fmt.Errorf("insert the new password: %w", err)
+			}
+			if _, err := q.Exec(ctx, `UPDATE morningstar.users SET password_changed_at = now(), updated_at = now(), version = version + 1 WHERE id = $1`, in.ActorUserID); err != nil {
+				return fmt.Errorf("record the password change: %w", err)
+			}
+		}
+
+		if in.RecoveryCodeHash != "" {
+			if _, err := q.Exec(ctx, `INSERT INTO morningstar.recovery_codes (id, user_id, code_hash) VALUES ($1, $2, $3)`, in.RecoveryCodeID, in.ActorUserID, in.RecoveryCodeHash); err != nil {
+				return fmt.Errorf("insert the new recovery code: %w", err)
+			}
 		}
 
 		// The audit event and the alert are part of phase 1. When either fails the

@@ -22,8 +22,8 @@ test: test-go test-web ## Run every automated test
 test-go: ## go vet, then go test with the race detector (includes the architecture test)
 	cd $(CORE) && go vet ./... && go test -race -count=1 ./...
 
-test-db: ## Integration tests against a throwaway PostgreSQL 18 cluster (fails when PostgreSQL 18 is missing)
-	cd $(CORE) && MORNINGSTAR_REQUIRE_DB_TESTS=1 go test -race -count=1 ./tests/integration/...
+test-db: ## Integration tests against a throwaway PostgreSQL 18 cluster and a headless Chromium (fails when either is missing)
+	cd $(CORE) && MORNINGSTAR_REQUIRE_DB_TESTS=1 MORNINGSTAR_REQUIRE_BROWSER_TESTS=1 go test -race -count=1 ./tests/integration/...
 
 test-web: ## Type check and Vitest
 	cd $(WEB) && npm run typecheck && npm test

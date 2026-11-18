@@ -81,6 +81,15 @@ type ReconcileInput struct {
 	OldMarkerGeneration uint64
 	ActorUserID         string
 	RequestID           string
+	// RecoveryCodeID and RecoveryCodeHash, when set, are inserted as the live
+	// recovery code of ActorUserID in the same transaction that revokes the
+	// restored ones (TD-M3-04).
+	RecoveryCodeID   string
+	RecoveryCodeHash string
+	// NewCredentialID and NewPasswordHash, when set, supersede the current
+	// credential of ActorUserID in the same transaction.
+	NewCredentialID string
+	NewPasswordHash string
 }
 
 // ReconcileCounts is how many records phase 1 invalidated.
@@ -97,6 +106,8 @@ type ReconcileCounts struct {
 	JobsCancelled        int `json:"jobs_cancelled"`
 	JobsStopRequested    int `json:"jobs_stop_requested"`
 	AttemptsLost         int `json:"attempts_lost"`
+	RecoveryCodesRevoked int `json:"recovery_codes_revoked"`
+	BootstrapExpired     int `json:"bootstrap_secrets_expired"`
 }
 
 // ErrRecoveryChanged is returned when the recovery_state row is not the one the

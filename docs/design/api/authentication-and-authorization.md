@@ -1,6 +1,6 @@
 # Authentication and authorization
 
-Status: design proposal. It applies the approved localhost web security profile (`security.md` 8, D-33, D-60, D-68, D-69, D-79). Nothing is implemented, and none of the controls below is tested. The threat rows are in `docs/security/threat-model.md` (T-19, T-20, T-54 to T-59, T-71).
+Status: design proposal. It applies the approved localhost web security profile (`security.md` 8, D-33, D-60, D-68, D-69, D-79). M4 (2026-11-18) implements and tests the controls of this file for the routes AUTH-01 to AUTH-10. The re-authentication check is available to the approval and policy use cases as `Reauth.Consume` (M19 and later call it). The approval and policy routes themselves, and the browser side, are later milestones. Every other statement of this file is still a design. The threat rows are in `docs/security/threat-model.md` (T-19, T-20, T-54 to T-59, T-71).
 
 ## 1. Principals
 

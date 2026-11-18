@@ -18,8 +18,11 @@ import (
 	"time"
 
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/inbound/http/router"
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/bootstrapfile"
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/passwordhash"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/persistence"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/recoverymarker"
+	authapp "github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/auth"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/health"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/recovery"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/config"
@@ -37,6 +40,8 @@ const (
 	// apiMaxConns bounds the server pool. The cluster allows 30 connections
 	// (scripts/db/pg-cluster.sh), and the worker and the tools share them.
 	apiMaxConns = 8
+	// maxConcurrentHashes bounds the Argon2id memory: 2 hashes of 64 MiB each.
+	maxConcurrentHashes = 2
 	// recoveryCheckTimeout bounds the startup recovery check.
 	recoveryCheckTimeout = 15 * time.Second
 	// recoveryRetryInterval is how often the check repeats while the database
@@ -53,12 +58,22 @@ type Server struct {
 	// db and recovery are nil when the server runs WithoutDatabase.
 	db       *persistence.DB
 	recovery *recovery.Service
+	auth     *authapp.Service
 }
 
 // ServerOption changes how NewServer composes the server.
 type ServerOption func(*serverOptions)
 
-type serverOptions struct{ database bool }
+type serverOptions struct {
+	database   bool
+	hashParams passwordhash.Params
+}
+
+// WithPasswordParams replaces the Argon2id parameters. Only tests use it, to
+// keep hashing fast. Production uses passwordhash.Default.
+func WithPasswordParams(p passwordhash.Params) ServerOption {
+	return func(o *serverOptions) { o.hashParams = p }
+}
 
 // WithoutDatabase composes a server that has no database, no readiness probe
 // and no recovery check. It exists for the tests of the HTTP layer. The
@@ -71,7 +86,7 @@ func WithoutDatabase() ServerOption { return func(o *serverOptions) { o.database
 // database readiness probe (D-86) and prepares the recovery check. It fails when
 // the recovery marker directory is unusable.
 func NewServer(cfg config.Config, logOut io.Writer, opts ...ServerOption) (*Server, error) {
-	o := serverOptions{database: true}
+	o := serverOptions{database: true, hashParams: passwordhash.Default}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -81,6 +96,7 @@ func NewServer(cfg config.Config, logOut io.Writer, opts ...ServerOption) (*Serv
 		probes []outbound.ReadinessProbe
 		db     *persistence.DB
 		rec    *recovery.Service
+		auth   *authapp.Service
 	)
 	if o.database {
 		var err error
@@ -94,20 +110,37 @@ func NewServer(cfg config.Config, logOut io.Writer, opts ...ServerOption) (*Serv
 		}
 		probes = append(probes, db.Probe())
 		rec = recovery.NewService(recovery.Deps{Markers: markers, Repo: db.Recovery(), NewID: ids.New, Now: time.Now, Logger: logger})
+		hasher, err := passwordhash.New(o.hashParams, maxConcurrentHashes)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("password hashing: %w", err)
+		}
+		auth = authapp.New(authapp.Deps{
+			Hasher: hasher, Accounts: db.Accounts(), Bootstraps: db.Bootstraps(), RecoveryCodes: db.RecoveryCodes(),
+			Sessions: db.Sessions(), Reauth: db.Reauth(), Attempts: db.Attempts(), Audit: db.Audit(),
+			SecretFile: bootstrapfile.New(cfg.Auth.RuntimeDir), Tx: db.Transactor(), Recovery: rec,
+			NewID: ids.New, Now: time.Now, Logger: logger,
+		})
 	}
 	healthSvc := health.New(probes, readinessTimeout, logger)
 
-	handler := router.New(router.Deps{
-		Health:       healthSvc,
-		AllowedHosts: cfg.HTTP.AllowedHosts,
-		Logger:       logger,
-	})
+	routerDeps := router.Deps{
+		Health:         healthSvc,
+		AllowedHosts:   cfg.HTTP.AllowedHosts,
+		AllowedOrigins: cfg.HTTP.AllowedOrigins,
+		Logger:         logger,
+	}
+	if auth != nil {
+		routerDeps.Auth = auth
+	}
+	handler := router.New(routerDeps)
 
 	return &Server{
 		cfg:      cfg,
 		logger:   logger,
 		db:       db,
 		recovery: rec,
+		auth:     auth,
 		http: &http.Server{
 			Handler:           handler,
 			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
@@ -123,11 +156,29 @@ func NewServer(cfg config.Config, logOut io.Writer, opts ...ServerOption) (*Serv
 	}, nil
 }
 
+// Auth returns the authentication use case, or nil WithoutDatabase. Use cases of
+// later milestones take their Principal and their re-authentication check from
+// it.
+func (s *Server) Auth() *authapp.Service { return s.auth }
+
+// Transactor returns the transaction foundation of the server pool, or nil
+// WithoutDatabase. Use cases that guard an action with a re-authentication grant
+// run the change and Auth().Consume in one transaction.
+func (s *Server) Transactor() outbound.Transactor {
+	if s.db == nil {
+		return nil
+	}
+	return s.db.Transactor()
+}
+
 // Recovery returns the recovery service, or nil WithoutDatabase.
 func (s *Server) Recovery() *recovery.Service { return s.recovery }
 
 // Close releases the database pool. Serve calls it when it returns.
 func (s *Server) Close() {
+	if s.auth != nil {
+		s.auth.Close()
+	}
 	if s.db != nil {
 		s.db.Close()
 	}
@@ -249,8 +300,9 @@ func (s *Server) checkRecovery(ctx context.Context) error {
 	}
 	if st.Required {
 		s.logger.Error("recovery is required: claims and authenticated routes stay closed until the reconciliation ran", "reason", string(st.Reason))
+		return nil
 	}
-	return nil
+	return s.auth.PrepareBootstrap(ctx)
 }
 
 func requireLoopback(a netip.Addr) error {

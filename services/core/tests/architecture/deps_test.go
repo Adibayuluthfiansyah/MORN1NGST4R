@@ -139,6 +139,8 @@ var external = []struct {
 	// pgx is isolated in the PostgreSQL adapter (structure.md section 6). The
 	// migration tool (goose) is run as a command and imported only by tests.
 	{path: "github.com/jackc/pgx/v5", allowedIn: []string{"internal/adapters/outbound/persistence"}},
+	// Argon2id for passwords and recovery codes (D-68, P-48).
+	{path: "golang.org/x/crypto/argon2", allowedIn: []string{"internal/adapters/outbound/passwordhash"}},
 }
 
 // processCreation lists the packages that may call os.StartProcess or

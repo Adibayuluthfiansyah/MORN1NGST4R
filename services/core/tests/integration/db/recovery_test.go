@@ -15,6 +15,7 @@ import (
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/outbound/recoverymarker"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/recovery"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/approval"
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/inbound"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/outbound"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/tests/integration/pgtest"
 )
@@ -75,6 +76,10 @@ func newStack(t *testing.T, c *pgtest.Cluster, dir string) *rstack {
 	s := &rstack{c: c, dir: dir, api: api, markers: &failingMarkers{RecoveryMarkerStore: store}, repo: &failingRepo{RecoveryRepository: persistence.NewRecovery(api)}}
 	s.svc = recovery.NewService(recovery.Deps{Markers: s.markers, Repo: s.repo, NewID: newID, Now: time.Now})
 	return s
+}
+
+func reconcileAs(s *rstack, userID string) (inbound.ReconcileCounts, error) {
+	return s.svc.Reconcile(context.Background(), inbound.ReconcileRequest{ActorUserID: userID, RequestID: newID()})
 }
 
 func stateDir(t *testing.T) string { return filepath.Join(t.TempDir(), "state") }
@@ -204,7 +209,7 @@ func TestGRecoveryRestoreOfAnOlderDumpIsDetected(t *testing.T) {
 		c.Snapshot(t, "snap_row6")
 		s2 := newStack(t, c, s.dir)
 		s2.mustCheck(t)
-		if _, err := s2.svc.Reconcile(t.Context(), b.UserID, newID()); err == nil {
+		if _, err := reconcileAs(s2, b.UserID); err == nil {
 			t.Fatal("Reconcile succeeded on a normal installation")
 		}
 		// Make it required first (marker removed), then reconcile to generation 2.
@@ -212,7 +217,7 @@ func TestGRecoveryRestoreOfAnOlderDumpIsDetected(t *testing.T) {
 			t.Fatal(err)
 		}
 		wantRequired(t, s2, recovery.ReasonMarkerMissing)
-		if _, err := s2.svc.Reconcile(t.Context(), b.UserID, newID()); err != nil {
+		if _, err := reconcileAs(s2, b.UserID); err != nil {
 			t.Fatal(err)
 		}
 		if g := s2.marker(t).Generation; g != 2 {
@@ -293,7 +298,7 @@ func TestGRecoveryOldMarkerWithANewerDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantRequired(t, s, recovery.ReasonMarkerMissing)
-	if _, err := s.svc.Reconcile(t.Context(), b.UserID, newID()); err != nil {
+	if _, err := reconcileAs(s, b.UserID); err != nil {
 		t.Fatal(err)
 	}
 	// Generation 2 now. Put the generation 1 marker back.
@@ -317,7 +322,7 @@ func TestGRecoveryCrashAfterEachPhase(t *testing.T) {
 		if _, err := c.Owner(t).Exec(t.Context(), `REVOKE INSERT ON morningstar.audit_events FROM ms_api`); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.svc.Reconcile(t.Context(), b.UserID, newID()); err == nil {
+		if _, err := reconcileAs(s, b.UserID); err == nil {
 			t.Fatal("Reconcile succeeded without an audit event")
 		}
 		var revoked *time.Time
@@ -351,7 +356,7 @@ func TestGRecoveryCrashAfterEachPhase(t *testing.T) {
 		}
 		wantRequired(t, s, recovery.ReasonMarkerMissing)
 		s.markers.fail.Store(true) // the process dies before the marker write
-		if _, err := s.svc.Reconcile(t.Context(), b.UserID, newID()); err == nil {
+		if _, err := reconcileAs(s, b.UserID); err == nil {
 			t.Fatal("Reconcile succeeded without a marker")
 		}
 		if _, ok := s.svc.Generation(); ok {
@@ -362,7 +367,7 @@ func TestGRecoveryCrashAfterEachPhase(t *testing.T) {
 		s.markers.fail.Store(false)
 		next := newStack(t, c, s.dir)
 		wantRequired(t, next, recovery.ReasonMarkerMissing)
-		if _, err := next.svc.Reconcile(t.Context(), b.UserID, newID()); err != nil {
+		if _, err := reconcileAs(next, b.UserID); err != nil {
 			t.Fatal(err)
 		}
 		var status string
@@ -379,7 +384,7 @@ func TestGRecoveryCrashAfterEachPhase(t *testing.T) {
 		}
 		wantRequired(t, s, recovery.ReasonDatabaseOlder)
 		s.markers.fail.Store(true)
-		if _, err := s.svc.Reconcile(t.Context(), b.UserID, newID()); err == nil {
+		if _, err := reconcileAs(s, b.UserID); err == nil {
 			t.Fatal("Reconcile succeeded without a marker write")
 		}
 		s.markers.fail.Store(false)
@@ -403,7 +408,7 @@ func TestGRecoveryCrashAfterEachPhase(t *testing.T) {
 		}
 		wantRequired(t, s, recovery.ReasonMarkerMissing)
 		s.repo.failComplete.Store(true)
-		if _, err := s.svc.Reconcile(t.Context(), b.UserID, newID()); err == nil {
+		if _, err := reconcileAs(s, b.UserID); err == nil {
 			t.Fatal("Reconcile succeeded without phase 3")
 		}
 		if _, ok := s.svc.Generation(); ok {
@@ -456,9 +461,9 @@ func TestGRecoveryNothingFromTheBackupSurvives(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantRequired(t, s, recovery.ReasonMarkerMissing)
-	st, err := s.svc.Reconcile(t.Context(), b.UserID, newID())
-	if err != nil || st.Required {
-		t.Fatalf("Reconcile = %+v, %v", st, err)
+	counts, err := reconcileAs(s, b.UserID)
+	if err != nil || counts.Generation != 2 || s.svc.State().Required {
+		t.Fatalf("Reconcile = %+v, %v", counts, err)
 	}
 
 	str := func(sql string, args ...any) string {
@@ -532,7 +537,7 @@ func TestGRecoveryAWorkerFromBeforeTheRestoreCannotClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantRequired(t, s, recovery.ReasonMarkerMissing)
-	if _, err := s.svc.Reconcile(t.Context(), b.UserID, newID()); err != nil {
+	if _, err := reconcileAs(s, b.UserID); err != nil {
 		t.Fatal(err)
 	}
 	// The worker still holds generation 1.
@@ -605,4 +610,69 @@ func TestGRecoveryAMarkerDeletedAtRuntimeIsNotRecreated(t *testing.T) {
 		t.Errorf("ClaimsAllowed = %v", err)
 	}
 	wantRequired(t, newStack(t, c, s.dir), recovery.ReasonMarkerMissing)
+}
+
+// M4: phase 1 replaces the password in the same transaction that revokes the
+// old authority. A failure anywhere in the phase keeps the restored password
+// and leaves the installation recovery_required.
+func TestGRecoveryPhaseOneReplacesThePasswordAtomically(t *testing.T) {
+	c, s, b := installed(t)
+	owner := c.Owner(t)
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := owner.Exec(t.Context(), sql, args...); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+	scalar := func(sql string) string {
+		t.Helper()
+		var v string
+		if err := owner.QueryRow(t.Context(), "SELECT ("+sql+")::text").Scan(&v); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+		return v
+	}
+	exec(`INSERT INTO morningstar.user_credentials (id, user_id, phc_hash) VALUES (uuidv7(), $1, 'phc:restored')`, b.UserID)
+	taken := newID()
+	exec(`INSERT INTO morningstar.recovery_codes (id, user_id, code_hash) VALUES ($1, $2, 'code:restored')`, taken, b.UserID)
+	if err := os.Remove(s.markerPath()); err != nil {
+		t.Fatal(err)
+	}
+	wantRequired(t, s, recovery.ReasonMarkerMissing)
+	current := func() string { return scalar(`SELECT phc_hash FROM morningstar.user_credentials WHERE is_current`) }
+
+	_, err := s.svc.Reconcile(t.Context(), inbound.ReconcileRequest{
+		ActorUserID: b.UserID, RequestID: newID(), NewRecoveryCodeID: taken, NewRecoveryCodeHash: "code:new",
+		NewCredentialID: newID(), NewPasswordHash: "phc:new",
+	})
+	if err == nil {
+		t.Fatal("a duplicate recovery code id did not fail phase 1")
+	}
+	if got := current(); got != "phc:restored" {
+		t.Fatalf("the password is %q after a failed phase 1", got)
+	}
+	if got := scalar(`SELECT count(*) FROM morningstar.user_credentials`); got != "1" {
+		t.Fatalf("%s credential rows after a failed phase 1", got)
+	}
+	wantRequired(t, newStack(t, c, s.dir), recovery.ReasonMarkerMissing)
+
+	s = newStack(t, c, s.dir)
+	if _, err := s.svc.Check(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.svc.Reconcile(t.Context(), inbound.ReconcileRequest{
+		ActorUserID: b.UserID, RequestID: newID(), NewRecoveryCodeID: newID(), NewRecoveryCodeHash: "code:new",
+		NewCredentialID: newID(), NewPasswordHash: "phc:new",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := current(); got != "phc:new" {
+		t.Fatalf("the password is %q after phase 1", got)
+	}
+	if got := scalar(`SELECT count(*) FILTER (WHERE is_current) || '/' || count(*) FROM morningstar.user_credentials`); got != "1/2" {
+		t.Fatalf("current/all credentials = %s", got)
+	}
+	if got := scalar(`SELECT password_changed_at IS NOT NULL FROM morningstar.users WHERE id = '` + b.UserID + `'`); got != "true" {
+		t.Fatal("the password change was not recorded")
+	}
 }

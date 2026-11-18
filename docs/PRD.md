@@ -7,9 +7,9 @@
 | Product | MORN1NGST4R (canonical technical name `morningstar`) |
 | Document | Product Requirements Document |
 | Version | 0.2 |
-| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold, the M1 scope package, the M2 policy and approval domain and the M3 persistence layer (PostgreSQL schema, atomic approval consumption, recovery generation, database readiness probe). |
+| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold, the M1 scope package, the M2 policy and approval domain, the M3 persistence layer (PostgreSQL schema, atomic approval consumption, recovery generation, database readiness probe) and the M4 authentication and session layer (one account, Argon2id, server-side sessions, CSRF, Host and Origin checks, login rate limit, bootstrap secret, recovery code, re-authentication grants, recovery gating). |
 | Last updated | 2026-11-16 |
-| Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. The M1 scope package (`services/core/internal/domain/scope`) implements the parsing and evaluation core of FR-SCOPE-001 and FR-SCOPE-002 for names and literals. Nothing uses it yet, so neither requirement is met end to end. The M2 packages (`internal/domain/actor`, `operation`, `approval` and the decision function `scope.Decide`) implement the pure domain part of FR-POLICY-001, FR-APPROVAL-001 to FR-APPROVAL-004 and FR-APPROVAL-006: the approval record and its lifecycle, the consumption state machine, the operation hash, the class derivation and the authorization value. M3 adds the PostgreSQL schema, the atomic consumption of approval uses and the recovery generation, but no use case and no worker call them yet, so none of these requirements is met end to end. No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
+| Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. The M1 scope package (`services/core/internal/domain/scope`) implements the parsing and evaluation core of FR-SCOPE-001 and FR-SCOPE-002 for names and literals. Nothing uses it yet, so neither requirement is met end to end. The M2 packages (`internal/domain/actor`, `operation`, `approval` and the decision function `scope.Decide`) implement the pure domain part of FR-POLICY-001, FR-APPROVAL-001 to FR-APPROVAL-004 and FR-APPROVAL-006: the approval record and its lifecycle, the consumption state machine, the operation hash, the class derivation and the authorization value. M3 adds the PostgreSQL schema, the atomic consumption of approval uses and the recovery generation, but no use case and no worker call them yet, so none of these requirements is met end to end. M4 implements FR-AUTH-001 and the server side of FR-AUTH-002 and FR-APPROVAL-005 (the re-authentication grant, not the approval use case, which is M19). No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
 | Owner | The project owner (single decision authority) |
 
 **Source documents.** Listed in precedence order (the order this document follows when sources differ).
@@ -368,7 +368,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 A test with injected AI text shows that none appears in the approval basis. AC2 An approve request from an AI actor, a worker or without a session is refused. AC3 Intrusive approval without password entry is refused, unless a window of at most five minutes was enabled by an explicit policy change (D-69). AC4 With no window configured, which is the default, password entry is required every time. AC5 Target strings are escaped and length-capped.
 - **Dependencies:** FR-AUTH-001, FR-APPROVAL-001.
 - **Security:** T-18, T-19, T-20. Framing denial is required on every response (D-79).
-- **MVP status:** Planned (M4 backend, M19 use case, M24 screen). Default is password entry every time (D-69).
+- **MVP status:** M4 backend is implemented and tested: `POST /session/reauthenticate` issues a single-use grant of 120 seconds, bound to the session, the purpose and the exact subject, and `Reauth.Consume` spends it in the transaction of the guarded change. AC3 and AC4 hold at that level (no window exists, so password entry is required every time). Planned: M19 use case (TD-M2-08), M24 screen (D-69).
 - **Source:** Decided. D-45, D-58, D-60, D-69, D-79, S1.6.
 
 #### FR-APPROVAL-006 Fan-out limits
@@ -390,8 +390,8 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 More than 5 failed login attempts within a rolling 15 minutes are refused until the window clears, and each is audited (policy default, D-68). AC2 No endpoint creates an API token. AC3 A stored session token is not recoverable from the database. AC4 Revoking a session invalidates it immediately. AC5 No credential appears in a URL. AC6 Account creation without the single-use bootstrap secret is refused, and the secret is never printed, logged or placed in a URL. AC7 A recovery code works once, a reset revokes every session, and a lost code has no bypass.
 - **Dependencies:** FR-AUDIT-001, M3.
 - **Security:** T-58, T-59, T-71. Recovery is a one-time recovery code through the web UI (D-68). First-run account creation uses a single-use bootstrap secret on a memory-backed file (D-68). Neither is implemented or tested.
-- **MVP status:** Planned (M4).
-- **Source:** Decided. D-60, D-68, D-69, `SEC 8`. The Argon2id values are starting values until the M4 benchmark (D-68).
+- **MVP status:** M4 implements and tests AC1 to AC7, with Argon2id m=65536 KiB, t=3, p=4 confirmed by the benchmark of 2026-11-18 (about 73 ms per hash on the target laptop). Planned: the web screens (M13).
+- **Source:** Decided. D-60, D-68, D-69, `SEC 8`. The Argon2id values were starting values until the M4 benchmark (D-68).
 
 #### FR-AUTH-002 Localhost request protection
 - **Requirement:** The system shall bind its listeners to loopback explicitly, reject requests whose Host is not allow-listed, reject state-changing requests whose Origin is missing or not allow-listed, restrict CORS, and protect state-changing requests against CSRF.
@@ -400,7 +400,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 The API and web server accept no connection on a non-loopback interface. AC2 A request with a foreign Host is rejected. AC3 A state-changing request without Origin is rejected. AC4 A cross-origin request without a valid CSRF token is rejected.
 - **Dependencies:** FR-AUTH-001.
 - **Security:** T-54 to T-57, T-68. Whether Next.js forwards a usable Host header through rewrites is not verified.
-- **MVP status:** Conditional on the M13 check of Host and Origin through the rewrite (D-79). Planned (M4 server side, M13 browser side).
+- **MVP status:** M4 implements and tests the server side (AC2 to AC4, including headless Chromium tests of DNS rebinding and of cookie sharing between local ports). It is conditional on the M13 check of Host and Origin through the rewrite (D-79). Planned: M13 browser side.
 - **Source:** Decided. D-33, D-79, `SEC 8`, `SEC 15`.
 
 ### Jobs
@@ -739,7 +739,7 @@ Targets appear only where a decision or evidence supports them.
 4. A Host header outside the allow-list gets 403 `host_denied` on every path. The server refuses to bind a non-loopback address.
 5. Another method on a health path gets 405 `method_not_allowed` with an `Allow` header, and an unknown path gets 404 `not_found`, both in the standard error envelope.
 6. No response contains a stack trace, secret, environment value, internal path, version string or dependency detail. A failing probe is logged by its fixed name only.
-7. The health routes are the only routes reachable without a session. Authentication for every other route is FR-AUTH-002 (M4).
+7. The health routes and the five public authentication routes (FR-AUTH-001) are the only routes reachable without a session. Every other route needs a live session (M4).
 8. Evidence: the automated tests of the Phase 1 scaffold (`services/core` router, bootstrap and architecture tests) for criteria 1, 2 and 4 to 6. Criterion 3 is verified by the M3 test `TestReadinessFollowsTheDatabase` (`services/core/tests/integration/server`).
 
 ## 3.10 Security and Privacy Requirements
@@ -758,7 +758,7 @@ This section maps the existing decisions to product requirements. It does not re
 | SR-08 | Egress enforcement | Conditional. Gaps recorded in the spike. | FR-TOOL-003 | D-41; T-36 to T-40 |
 | SR-09 | Approval binding and expiry | Decided | FR-APPROVAL-001, FR-APPROVAL-002, FR-APPROVAL-003 | D-06, D-30, D-48, D-49, D-51, D-55; T-16, T-17 |
 | SR-10 | Revocation | Decided objective, timing is the G-revoke gate (O-35) | FR-APPROVAL-003, FR-SCOPE-006 | D-48, D-71; T-15 |
-| SR-11 | Authentication and session | Decided (D-60, D-68, D-69). Not implemented. | FR-AUTH-001, FR-APPROVAL-005 | D-60, D-58, D-68, D-69; T-58, T-59, T-71 |
+| SR-11 | Authentication and session | Decided (D-60, D-68, D-69). Implemented and tested in M4. | FR-AUTH-001, FR-APPROVAL-005 | D-60, D-58, D-68, D-69; T-58, T-59, T-71 |
 | SR-12 | Localhost inbound protection | Decided requirement, Conditional mechanism | FR-AUTH-002 | D-33; T-54 to T-57, T-68 |
 | SR-13 | Credential protection | Decided (D-52, D-85). Worker access to the Secret Service not verified, gate in M25. | FR-CRED-001 | D-08, D-52, D-85; T-62, T-63 |
 | SR-14 | AI provider data disclosure | Decided (D-46, D-50, D-81). Trusted-LAN category deferred (O-36). | FR-AI-002, NFR-PRIV-001 | D-46, D-50, D-81; T-43 |

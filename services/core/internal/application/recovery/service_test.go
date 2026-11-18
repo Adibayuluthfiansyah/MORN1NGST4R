@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/application/recovery"
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/inbound"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/outbound"
 )
 
@@ -120,6 +121,10 @@ func (f *fakeRepo) CompleteReconcile(_ context.Context, gen uint64, reason strin
 	return nil
 }
 
+func reconcile(svc *recovery.Service, actorID, requestID string) (inbound.ReconcileCounts, error) {
+	return svc.Reconcile(context.Background(), inbound.ReconcileRequest{ActorUserID: actorID, RequestID: requestID})
+}
+
 func newService(t *testing.T, m *fakeMarkers, r *fakeRepo) *recovery.Service {
 	t.Helper()
 	return recovery.NewService(recovery.Deps{
@@ -224,14 +229,38 @@ func required(t *testing.T, m *fakeMarkers, r *fakeRepo) *recovery.Service {
 	return svc
 }
 
+func TestReconcilePassesTheNewCredentialToPhaseOneAndRefusesAHalfPair(t *testing.T) {
+	m := &fakeMarkers{m: &outbound.RecoveryMarker{InstanceID: idA, Generation: 5, AuditWatermark: 40}}
+	r := &fakeRepo{row: &outbound.RecoveryRow{InstanceID: idA, Generation: 3}, maxSeq: 10}
+	svc := required(t, m, r)
+	do := func(id, hash string) error {
+		_, err := svc.Reconcile(t.Context(), inbound.ReconcileRequest{ActorUserID: actor, RequestID: request, NewCredentialID: id, NewPasswordHash: hash})
+		return err
+	}
+	for name, c := range map[string][2]string{"hash without id": {"", "phc:new"}, "id without hash": {idA, ""}, "id not a uuid": {"not-a-uuid", "phc:new"}} {
+		if err := do(c[0], c[1]); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	if len(r.began) != 0 || !svc.State().Required {
+		t.Fatalf("a malformed credential reached phase 1 (%d calls)", len(r.began))
+	}
+	if err := do(idA, "phc:new"); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.began) != 1 || r.began[0].NewCredentialID != idA || r.began[0].NewPasswordHash != "phc:new" {
+		t.Fatalf("phase 1 input = %+v", r.began)
+	}
+}
+
 func TestReconcileRunsAllThreePhases(t *testing.T) {
 	m := &fakeMarkers{m: &outbound.RecoveryMarker{InstanceID: idA, Generation: 5, AuditWatermark: 40}}
 	r := &fakeRepo{row: &outbound.RecoveryRow{InstanceID: idA, Generation: 3}, maxSeq: 10}
 	svc := required(t, m, r)
 
-	st, err := svc.Reconcile(t.Context(), actor, request)
-	if err != nil || st.Required {
-		t.Fatalf("Reconcile = %+v, %v", st, err)
+	counts, err := reconcile(svc, actor, request)
+	if err != nil || counts.Generation != 6 || svc.State().Required {
+		t.Fatalf("Reconcile = %+v, %v", counts, err)
 	}
 	if len(r.began) != 1 || r.began[0].NewGeneration != 6 || r.began[0].ExpectedGeneration != 3 || r.began[0].OldMarkerGeneration != 5 {
 		t.Errorf("phase 1 input = %+v, want new generation max(5,3)+1 = 6", r.began)
@@ -262,7 +291,7 @@ func TestReconcileInstanceChoice(t *testing.T) {
 		m := &fakeMarkers{m: &outbound.RecoveryMarker{InstanceID: idA, Generation: 2}}
 		r := &fakeRepo{users: true}
 		svc := required(t, m, r)
-		if _, err := svc.Reconcile(t.Context(), actor, request); err != nil {
+		if _, err := reconcile(svc, actor, request); err != nil {
 			t.Fatal(err)
 		}
 		if r.began[0].InstanceID != idA || r.began[0].NewGeneration != 3 {
@@ -272,7 +301,7 @@ func TestReconcileInstanceChoice(t *testing.T) {
 	t.Run("no row and no valid marker creates an instance and starts above 1", func(t *testing.T) {
 		m, r := &fakeMarkers{invalid: true}, &fakeRepo{users: true}
 		svc := required(t, m, r)
-		if _, err := svc.Reconcile(t.Context(), actor, request); err != nil {
+		if _, err := reconcile(svc, actor, request); err != nil {
 			t.Fatal(err)
 		}
 		if r.began[0].InstanceID != newInst || r.began[0].NewGeneration != 2 || r.began[0].Reason != string(recovery.ReasonMarkerInvalid) {
@@ -283,7 +312,7 @@ func TestReconcileInstanceChoice(t *testing.T) {
 		m := &fakeMarkers{m: &outbound.RecoveryMarker{InstanceID: idB, Generation: 1}}
 		r := &fakeRepo{row: &outbound.RecoveryRow{InstanceID: idA, Generation: 1}}
 		svc := required(t, m, r)
-		if _, err := svc.Reconcile(t.Context(), actor, request); err != nil {
+		if _, err := reconcile(svc, actor, request); err != nil {
 			t.Fatal(err)
 		}
 		if m.writes[len(m.writes)-1].InstanceID != idA {
@@ -299,8 +328,8 @@ func TestReconcileIsRefusedWhenNothingIsRequired(t *testing.T) {
 	if _, err := svc.Check(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Reconcile(t.Context(), actor, request); !errors.Is(err, recovery.ErrNotRequired) {
-		t.Errorf("error = %v, want ErrNotRequired", err)
+	if _, err := reconcile(svc, actor, request); !errors.Is(err, inbound.ErrRecoveryNotRequired) {
+		t.Errorf("error = %v, want ErrRecoveryNotRequired", err)
 	}
 	if len(r.began) != 0 {
 		t.Error("phase 1 ran")
@@ -312,7 +341,7 @@ func TestReconcileRefusesBadActorAndRequestIDs(t *testing.T) {
 	r := &fakeRepo{row: &outbound.RecoveryRow{InstanceID: idA, Generation: 1}}
 	svc := required(t, m, r)
 	for _, tc := range [][2]string{{"", request}, {actor, ""}, {"x", request}, {actor, "'; DROP"}} {
-		if _, err := svc.Reconcile(t.Context(), tc[0], tc[1]); err == nil {
+		if _, err := reconcile(svc, tc[0], tc[1]); err == nil {
 			t.Errorf("Reconcile(%q, %q) succeeded", tc[0], tc[1])
 		}
 	}
@@ -332,7 +361,7 @@ func TestReconcileCrashAfterEachPhase(t *testing.T) {
 		m, r := setup()
 		r.failBegin = errBoom
 		svc := required(t, m, r)
-		if _, err := svc.Reconcile(t.Context(), actor, request); !errors.Is(err, errBoom) {
+		if _, err := reconcile(svc, actor, request); !errors.Is(err, errBoom) {
 			t.Fatalf("error = %v", err)
 		}
 		if len(m.writes) != 0 || r.row.Generation != 1 || r.row.Reconciling {
@@ -350,7 +379,7 @@ func TestReconcileCrashAfterEachPhase(t *testing.T) {
 		m, r := setup()
 		svc := required(t, m, r)
 		m.failWrite = errBoom // the marker write of phase 2 fails
-		if _, err := svc.Reconcile(t.Context(), actor, request); err == nil {
+		if _, err := reconcile(svc, actor, request); err == nil {
 			t.Fatal("Reconcile succeeded without a marker write")
 		}
 		if _, ok := svc.Generation(); ok {
@@ -377,7 +406,7 @@ func TestReconcileCrashAfterEachPhase(t *testing.T) {
 		m, r := setup()
 		svc := required(t, m, r)
 		r.failComplete = errBoom
-		if _, err := svc.Reconcile(t.Context(), actor, request); err == nil {
+		if _, err := reconcile(svc, actor, request); err == nil {
 			t.Fatal("Reconcile succeeded without phase 3")
 		}
 		if _, ok := svc.Generation(); ok {

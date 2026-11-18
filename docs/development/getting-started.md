@@ -14,6 +14,7 @@ This page covers the first implementation phase: the Go server skeleton, the web
 | `internal/domain/scope` (M1): host, address, prefix and port parsing, rules, `RuleSet.Evaluate`. Standard library only, not called by any other package yet | Implemented |
 | `internal/domain/actor`, `operation`, `approval` and `scope.Decide` (M2): actors, the canonical operation and its hash, approvals with their consumption state machine, the pure decision function and `AuthorizedOperation`. Standard library only, not called by any other package yet | Implemented |
 | PostgreSQL (M3): per-user cluster script, 33 tables in 10 migrations, four login roles, append-only audit table, atomic approval consumption, recovery generation (marker and reconciliation), database readiness probe | Implemented. See the section "Database" below |
+| Authentication and session (M4): one local account, Argon2id, server-side sessions with hashed tokens, HttpOnly cookies, CSRF, Origin and Host checks, login rate limit, bootstrap secret on a memory-backed file, one-time recovery code, re-authentication grants, recovery gating and the reconcile route (`GET /session`, `POST /setup/account`, `/session/login`, `/session/logout`, `GET /sessions`, `POST /sessions/{id}/revoke`, `/session/reauthenticate`, `/recovery/reset`, `/system/recovery/reconcile`, `/account/password`) | Implemented |
 | `apps/web` Next.js App Router shell with a backend status line (5 s request timeout, re-checks every 5 s until the backend is ready) and a same-origin rewrite | Implemented |
 | Redacting `log/slog` logger | Implemented (by key name only) |
 
@@ -21,7 +22,7 @@ This page covers the first implementation phase: the Go server skeleton, the web
 
 | Area | State |
 | --- | --- |
-| Authentication, sessions, CSRF, Origin checks | Not implemented (M4). The only routes are the two public health probes |
+| Login, bootstrap and recovery screens | Not built (M13). Until then the routes are used with an HTTP client that keeps cookies and sends the CSRF header |
 | `cmd/worker`, jobs, claiming, tool execution, sandbox, egress | Not created. They wait for G-recovery and G-consume |
 | Domain packages other than `scope`, `actor`, `operation` and `approval`, the tables of the asset, evidence, finding, integration and AI slices (00008 to 00012) | Not created (M6 and later) |
 | OpenAPI generation | Not done. Gate G-openapi has not passed. The health routes are not in `docs/design/api/openapi.yaml` and the web client is hand-written |
@@ -85,11 +86,26 @@ The Go server reads only the process environment. It does not read `.env` files.
 | --- | --- | --- |
 | `MORNINGSTAR_HTTP_LISTEN` | `127.0.0.1:8080` | Loopback IP literal with a port. Wildcard, LAN, hostname and port 0 are refused |
 | `MORNINGSTAR_HTTP_ALLOWED_HOSTS` | listen address and `localhost` on the same port | Exact `host:port` list, loopback names only |
+| `MORNINGSTAR_HTTP_ALLOWED_ORIGINS` | `http://127.0.0.1:3000,http://localhost:3000` | Exact `scheme://host:port` list of the web UI. Loopback `http` origins only. A state-changing request must send an Origin from this list |
 | `MORNINGSTAR_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `MORNINGSTAR_LOG_FORMAT` | `json` | `json` or `text` |
 | `MORNINGSTAR_API_ORIGIN` (web) | `http://127.0.0.1:8080` | Loopback `http` origin with a port. Read by `next.config.ts` at `next build` or `next dev` start |
 
 An unknown `MORNINGSTAR_*` variable stops the server, so a misspelled setting is never ignored. The one exception is `MORNINGSTAR_API_ORIGIN`: it belongs to the web UI, so the Go server accepts it and ignores its value. One shared environment can therefore serve both processes. A rejected value is quoted in the message. No secret is read from the environment. If you change the API port, set `MORNINGSTAR_API_ORIGIN` before `next build`, because Next.js fixes rewrite destinations at build time.
+
+## Authentication and account
+
+The account is created once, with a bootstrap secret that never leaves memory-backed storage.
+
+- When the server starts and no account exists, it creates a 256-bit secret, stores only its hash in the database and writes the secret to `$XDG_RUNTIME_DIR/morningstar/bootstrap-secret` (file mode 0600, directory mode 0700). The directory must be on tmpfs or ramfs. On a normal Linux login session `XDG_RUNTIME_DIR` is `/run/user/<uid>`. If it is unset, relative or on disk, the server still runs but `POST /api/v1/setup/account` answers 409 `setup_unavailable`, and nothing is written. There is no setting that moves the file to disk.
+- `GET /api/v1/session` reports `setup_required`, `anonymous` or `authenticated`, and hands out the CSRF token that the next request needs (`X-CSRF-Token`, together with an allow-listed `Origin` header). Anonymous callers get the token with an `ms_anon` cookie that lasts 15 minutes. Signed-in callers get the token of their session.
+- `POST /api/v1/setup/account` takes the secret, a username and a password, creates the account, deletes the secret file, signs in and returns a one-time recovery code. The code is shown once. A restart replaces an unused secret with a new one.
+- A password has 12 to 128 characters, valid UTF-8, no control characters and is not the username. A username has 3 to 64 characters from `a-z 0-9 . _ -`.
+- Sessions idle out after 30 minutes and end after 12 hours. Logout, a password change and a recovery reset revoke them on the server.
+- Five failed password guesses (login, re-authentication) in a rolling 15 minutes block the next one until the window clears. Recovery-code guesses and bootstrap-secret guesses have their own counts, so a locked password does not close the recovery route.
+- Lost password: `POST /api/v1/recovery/reset` with the recovery code sets a new password, revokes every session and returns a new code. The old code is spent.
+- After a database restore the server answers 503 `recovery_required` on every route except `GET /session` and `POST /api/v1/system/recovery/reconcile`. The reconcile call needs the password of the restored database and a new password, which replaces it in the same step. It revokes every session, consumes every open recovery code and bootstrap secret of the restored database and returns a new recovery code. If the call fails after the database step, the new password is already set: log in with it.
+- The cookies are `HttpOnly`, `SameSite=Strict` and set no domain. `Secure` is set only when the connection uses TLS, which the MVP does not, so the cookies of a plain `http://localhost` session do not carry it.
 
 ## Health endpoints
 
@@ -109,6 +125,9 @@ One manual run on the reference host (Next.js 16.4.6 with `next start`, API on a
 ## Tests
 
 - `services/core/tests/integration/db` and `tests/integration/server` (need PostgreSQL 18, see `make test-db`): migrations, schema against the data dictionary, socket and role provisioning, grant matrix, append-only and column-limiting triggers, G-consume (real concurrent transactions, agreement with the M2 model), G-recovery (a real restore of an older database), the readiness probe against a stopped cluster.
+- `services/core/tests/integration/auth` (needs PostgreSQL 18): setup and the bootstrap secret, login, the rate limit and its budgets, sessions, expiry and revocation, CSRF, re-authentication grants, recovery reset, password change, recovery gating and reconcile, restore of an older database, and secrets in logs, audit events and error responses. `browser_test.go` drives headless Chromium (DNS rebinding, cookie sharing between local ports). It skips when no Chromium is installed, and `MORNINGSTAR_REQUIRE_BROWSER_TESTS=1` (set by `make test-db`) turns that skip into a failure.
+- `services/core/internal/application/auth`, `internal/domain/identity`, `internal/adapters/outbound/{passwordhash,bootstrapfile}`, `internal/adapters/inbound/http/{router,handlers}`: session checks, tokens, the order of the setup steps, password policy, the hash bounds, the secret file, the route table (Host, Origin, CSRF, session, gate, body rules, rate limit) and the cookie attributes. `go test -run '^$' -bench Hash ./internal/adapters/outbound/passwordhash` repeats the Argon2id benchmark.
+- `services/core/tests/architecture`: also `TestHumanActorIsBuiltOnlyByTheAuthenticationUseCase` (TD-M2-01).
 - `services/core/internal/adapters/outbound/{persistence,recoverymarker}`, `internal/application/recovery`, `internal/platform/posix`: connection settings, marker file (modes, symlinks, concurrent writers), the decision table and the crash-resume paths with injected failures.
 - `services/core/internal/config`: defaults, overrides, 22 refusals (wildcard and LAN listen, IPv4-mapped IPv6, unknown variables, bad hosts, bad levels), and the web-only `MORNINGSTAR_API_ORIGIN` (accepted and ignored, near-miss names still refused).
 - `services/core/internal/infrastructure/logging`: secret-looking keys are redacted, including inside groups. Values are not inspected.
@@ -122,6 +141,9 @@ One manual run on the reference host (Next.js 16.4.6 with `next start`, API on a
 - `apps/web`: the readiness client (strict parsing, no credentials, bounded by a timeout that also covers a stalled body, no timer left behind), the status component (a rejected or throwing check shows unreachable, sequential re-polling that stops on ready and on unmount), the API origin and header helpers, and `next.config.ts` itself (the rewrite target, the refusal of a non-loopback origin, the page headers and their exclusion of `/api/`).
 
 ## Deviations and open items for the owner
+
+- M4 decisions that wait for the owner (details in the plan, section "Milestone M4"): the password policy numbers, the Argon2id values for `tech.md`, and the default web origin `http://127.0.0.1:3000`. The owner approved the `newPassword` field and the extra `recoveryCode` field of the reconcile call and the 300 per minute limit of `GET /session` on 2026-11-18.
+- A local process can lock the password for 15 minutes at a time with five wrong guesses. This is accepted (T-59). Recovery by code is the way back in.
 
 - Health endpoints. Kept in the MVP by D-86 (`docs/decisions/0004-health-endpoints-mvp-decision.md`), which supersedes D-80 for health endpoints. Metrics stay post-MVP.
 - Milestone. The scaffold is recorded in the plan as existing preparatory work and is not a milestone. M1 (the `scope` package) and M2 (the policy and approval domain) are implemented. It decides scope only. It does not decide readiness (D-89), and `Decision` does not name the deciding rule yet (D-91). See `docs/decisions/0005-m1-scope-engine-closure-decisions.md`.
