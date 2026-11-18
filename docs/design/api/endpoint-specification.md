@@ -1,6 +1,6 @@
 # Endpoint specification
 
-Status: design proposal. Common rules for every endpoint are in `conventions.md` and `authentication-and-authorization.md`. This file states what is specific. Rate limit classes: RL-AUTH = 5 failed attempts per rolling 15 minutes per client key and per account (D-68), plus 30 requests per minute; RL-READ = 300 per minute per session; RL-WRITE = 60 per minute per session; RL-PREVIEW = 30 per minute per session; RL-DOWNLOAD = 30 per minute per session; RL-AITEST = 6 per minute per session (proposed numbers, DQ-06).
+Status: design proposal. Common rules for every endpoint are in `conventions.md` and `authentication-and-authorization.md`. This file states what is specific. Implementation status (M4, 2026-11-18): AUTH-01 to AUTH-10 are implemented and tested. Three deliberate differences from the text below, all approved by the owner on 2026-11-18: GET `/session` has its own limit (AUTH-01), the request of AUTH-10 also carries `newPassword`, and the response of AUTH-10 also carries the new `recoveryCode`. Attempt counting: login, re-authentication (AUTH-07, AUTH-09) and the password check of AUTH-10 share one budget of 5 failures per rolling 15 minutes. Recovery-code guesses (AUTH-08) and the bootstrap secret (AUTH-02) each have their own, so a locked password does not lock recovery. Rate limit classes: RL-AUTH = 5 failed attempts per rolling 15 minutes per client key and per account (D-68), plus 30 requests per minute; RL-READ = 300 per minute per session; RL-WRITE = 60 per minute per session; RL-PREVIEW = 30 per minute per session; RL-DOWNLOAD = 30 per minute per session; RL-AITEST = 6 per minute per session (proposed numbers, DQ-06).
 
 Success status codes: 200 for reads and actions, 201 for creation, 204 for logout and password change. Every response carries `X-Request-Id`. Every error uses the schema in `error-model.md`.
 
@@ -24,7 +24,7 @@ Success status codes: 200 for reads and actions, 201 for creation, 204 for logou
 | Error responses | 403 `host_denied`, 429 `rate_limited`, 500 `internal_error`, 503 `database_unavailable` |
 | Idempotency | Naturally idempotent (reads, or a PUT/PATCH that sets state with optimistic locking). |
 | Audit event | none (read only) |
-| Rate limit | RL-AUTH (5 failed attempts per rolling 15 minutes per client key and per account (D-68), plus 30 requests per minute) |
+| Rate limit | 300 requests per minute per client key. This route takes no credential, so it is not in RL-AUTH (changed in M4: a flood of reads must not use up the 30 per minute of login, M4 review). Accepted risk for the MVP: every local caller shares the client key, so a local process can use up the 300 per minute and starve the web UI's own session reads for the rest of the minute. It cannot read or use a session, and login and recovery have their own budgets |
 | Security considerations | Returns no account data to an anonymous caller beyond the state. The CSRF token is returned in the body and never in a URL or cookie readable by script. |
 | PRD requirements | FR-AUTH-001, FR-AUTH-002 |
 
@@ -186,7 +186,7 @@ Success status codes: 200 for reads and actions, 201 for creation, 204 for logou
 
 | Property | Value |
 | --- | --- |
-| Purpose | After a detected restore, run the reconciliation that invalidates old authority and starts a new recovery generation. Needs the account password. |
+| Purpose | After a detected restore, run the reconciliation that invalidates old authority and starts a new recovery generation. Needs the password of the restored database and sets a new password in the same step, so a password that was rotated before the backup was taken does not come back. Every session of the restored database is revoked. |
 | Authentication | None (public route) |
 | Authorization | Public route. Host allow-list, Origin allow-list for state changes, rate limit. State precondition: recovery_required state |
 | Re-authentication | No |
@@ -194,8 +194,8 @@ Success status codes: 200 for reads and actions, 201 for creation, 204 for logou
 | Request headers | `Host` (allow-listed), `Accept: application/json`, `Cookie: ms_anon` (from GET /session), `Origin` (required, allow-listed), `X-CSRF-Token`, `Content-Type: application/json` |
 | Path parameters | none |
 | Query parameters | none |
-| Request schema | `RecoveryReconcileRequest` |
-| Response schema | `RecoveryReconcileResult` |
+| Request schema | `RecoveryReconcileRequest`. `password` is the restored password, `newPassword` replaces it (policy of AUTH-02, different from `password`, a refusal changes nothing, 422 `validation_failed` names the field) |
+| Response schema | `RecoveryReconcileResult`. It also carries `recoveryCode`, the new one-time code that replaces every code of the restored database. It is shown once, like the code of AUTH-02 and AUTH-08 (added in M4) |
 | Success status | 200 |
 | Error responses | 400 `invalid_request`, 401 `invalid_credentials`, 403 `csrf_invalid`, 403 `host_denied`, 403 `origin_denied`, 409 `conflict_state`, 409 `recovery_not_required`, 413 `payload_too_large`, 415 `unsupported_media_type`, 422 `validation_failed`, 429 `rate_limited`, 500 `internal_error`, 503 `database_unavailable` |
 | Idempotency | State-guarded. A repeat after the transition returns `conflict_state` and changes nothing. |

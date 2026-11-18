@@ -8407,13 +8407,19 @@ components:
       properties:
         password:
           type: "string"
+          description: "The password of the restored database."
+        newPassword:
+          type: "string"
+          description: "The new password. It replaces the restored one in the same transaction, must meet the password policy and must differ from password."
         confirmRevocation:
           type: "boolean"
       required:
         - "password"
+        - "newPassword"
         - "confirmRevocation"
       example:
         password: "EXAMPLE-ONLY-NOT-A-SECRET"
+        newPassword: "EXAMPLE-ONLY-NOT-A-SECRET-2"
         confirmRevocation: false
     RecoveryReconcileResult:
       type: "object"
@@ -8431,6 +8437,9 @@ components:
           type: "integer"
         cancelledJobs:
           type: "integer"
+        recoveryCode:
+          type: "string"
+          description: "The new one-time recovery code. It is shown once and replaces every code of the restored database."
       required:
         - "generation"
         - "revokedSessions"
@@ -8438,6 +8447,7 @@ components:
         - "staleValidations"
         - "revokedLabs"
         - "cancelledJobs"
+        - "recoveryCode"
       example:
         generation: 1
         revokedSessions: 1
@@ -8445,6 +8455,7 @@ components:
         staleValidations: 1
         revokedLabs: 1
         cancelledJobs: 1
+        recoveryCode: "ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ23-4567"
     UserSummary:
       type: "object"
       additionalProperties: false

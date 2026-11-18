@@ -56,7 +56,7 @@ If the marker cannot be written at startup the process does not start serving. E
 
 ## 6. Reconciliation (AUTH-10)
 
-The operator opens the application, sees the recovery page (section 9), and submits the account password and a confirmation. The password is checked like a login and counts toward the rate limit.
+The operator opens the application, sees the recovery page (section 9), and submits the account password of the restored database, a new password and a confirmation. The old password is checked like a login and counts toward the rate limit, and only then is the new one hashed. The new password must differ from the old one and meet the password policy. Phase 1 replaces the current credential with the new one in the same transaction, because the restored hash may be older than a rotation and must not keep its authority (M4, owner decision of 2026-11-18). The new recovery code is issued in the same transaction.
 
 **Phase 1, one database transaction.** Compute `newG = max(M.generation if valid, D.generation) + 1`. Set `recovery_state` to `reconciling`, `generation = newG`, the reason. Then invalidate authority recorded in the database:
 

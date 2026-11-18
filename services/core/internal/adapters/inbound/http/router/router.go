@@ -8,39 +8,36 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/inbound/http/handlers"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/inbound/http/middleware"
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/inbound/http/request"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/adapters/inbound/http/response"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/inbound"
 )
 
-// BasePath is the API base path (API-01).
 const BasePath = "/api/v1"
 
-// Deps are the collaborators of the router.
 type Deps struct {
 	Health inbound.Health
+	// Auth is nil only in tests of the health routes. Without it no
+	// authentication route exists.
+	Auth inbound.Auth
 	// AllowedHosts is the exact Host allow-list. Empty denies everything.
 	AllowedHosts []string
-	// Logger receives the access log. Nil discards it.
-	Logger *slog.Logger
+	// AllowedOrigins is the exact Origin allow-list of state-changing requests.
+	AllowedOrigins []string
+	Logger         *slog.Logger
 }
 
-// New returns the HTTP handler.
-//
-// Authentication, session, CSRF and Origin checks are not part of this phase
-// (milestone M4). Until they exist the only routes are the two public health
-// probes, which return a fixed status word and nothing else.
-func New(d Deps) http.Handler {
-	return build(d)
-}
+func New(d Deps) http.Handler { return build(d) }
 
 // build assembles the engine. afterRecovery handlers run directly after the
-// Recovery middleware. Production code passes none. Tests use it to prove that
-// Recovery wraps everything below it.
+// Recovery middleware. Tests use it to prove that Recovery wraps everything
+// below it.
 func build(d Deps, afterRecovery ...gin.HandlerFunc) *gin.Engine {
 	logger := d.Logger
 	if logger == nil {
@@ -49,24 +46,21 @@ func build(d Deps, afterRecovery ...gin.HandlerFunc) *gin.Engine {
 
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
-	// Do not trust X-Forwarded-* from anyone, and never redirect: a request
-	// either matches a route exactly or it is a 404.
+	// Nobody is a trusted proxy, and a request either matches a route exactly
+	// or is a 404: forwarded headers and redirects never change the Host or the
+	// path that a check saw.
 	if err := engine.SetTrustedProxies(nil); err != nil {
-		panic("router: " + err.Error()) // nil is always valid
+		panic("router: " + err.Error())
 	}
 	engine.RedirectTrailingSlash = false
 	engine.RedirectFixedPath = false
 	engine.HandleMethodNotAllowed = true
 
-	// The order matters.
-	//   - Recovery is first, so no application middleware can panic outside
-	//     it. It sets the request id and the headers itself when the panic
-	//     came before the middleware that sets them.
-	//   - The request id comes next so every later record has it.
-	//   - The Host allow-list runs before routing, so an unknown path or
-	//     method from a foreign Host is still a 403.
+	// Recovery is outermost, so no middleware below it can panic outside it. The
+	// Host allow-list runs before routing, so an unknown path from a foreign
+	// Host is still a 403.
 	chain := []gin.HandlerFunc{middleware.Recovery(logger)}
-	chain = append(chain, afterRecovery...) // test seam, empty in production
+	chain = append(chain, afterRecovery...)
 	chain = append(chain,
 		middleware.RequestID(),
 		middleware.SecurityHeaders(),
@@ -79,15 +73,16 @@ func build(d Deps, afterRecovery ...gin.HandlerFunc) *gin.Engine {
 	v1 := engine.Group(BasePath)
 	v1.GET("/health/live", health.Live)
 	v1.GET("/health/ready", health.Ready)
+	if d.Auth != nil {
+		authRoutes(v1, d)
+	}
 
-	allow := allowedMethods(engine)
 	engine.NoRoute(func(c *gin.Context) {
 		response.Error(c, http.StatusNotFound, response.CodeNotFound)
 	})
+	allow := allowedMethods(engine)
 	engine.NoMethod(func(c *gin.Context) {
-		// Valid while every route is static. Revisit with the first
-		// parameterised route.
-		if m := allow[c.Request.URL.Path]; m != "" {
+		if m := allow(c.Request.URL.Path); m != "" {
 			c.Header("Allow", m)
 		}
 		response.Error(c, http.StatusMethodNotAllowed, response.CodeMethodNotAllowed)
@@ -95,16 +90,71 @@ func build(d Deps, afterRecovery ...gin.HandlerFunc) *gin.Engine {
 	return engine
 }
 
-// allowedMethods maps each registered static path to its Allow header value.
-func allowedMethods(engine *gin.Engine) map[string]string {
-	byPath := make(map[string][]string)
+// authRoutes registers the routes of docs/design/api/endpoint-specification.md
+// section "Authentication and account", with the checks in the order of
+// authentication-and-authorization.md section 2.
+func authRoutes(v1 *gin.RouterGroup, d Deps) {
+	h := handlers.NewAuth(d.Auth)
+	var (
+		perClient   = middleware.RateLimitClient(middleware.NewLimiter(30, time.Minute))
+		perClientRd = middleware.RateLimitClient(middleware.NewLimiter(300, time.Minute))
+		readLimit   = middleware.RateLimitSession(middleware.NewLimiter(300, time.Minute))
+		writeLimit  = middleware.RateLimitSession(middleware.NewLimiter(60, time.Minute))
+		reauthLimit = middleware.RateLimitSession(middleware.NewLimiter(30, time.Minute))
+		jsonBody    = middleware.JSONBody(request.AuthBodyLimit)
+		origin      = middleware.Origin(d.AllowedOrigins)
+		anonCSRF    = middleware.CSRFAnon(d.Auth)
+		session     = middleware.Session(d.Auth)
+		sessionCSRF = middleware.CSRFSession()
+		gate        = middleware.RecoveryGate(d.Auth)
+	)
+
+	// These two work while recovery is required.
+	v1.GET("/session", perClientRd, h.State)
+	v1.POST("/system/recovery/reconcile", jsonBody, perClient, origin, anonCSRF, h.Reconcile)
+
+	g := v1.Group("", gate)
+	g.POST("/setup/account", jsonBody, perClient, origin, anonCSRF, h.Setup)
+	g.POST("/session/login", jsonBody, perClient, origin, anonCSRF, h.Login)
+	g.POST("/recovery/reset", jsonBody, perClient, origin, anonCSRF, h.ResetPassword)
+
+	g.GET("/sessions", session, readLimit, h.List)
+	g.POST("/session/logout", session, writeLimit, origin, sessionCSRF, h.Logout)
+	g.POST("/sessions/:sessionId/revoke", session, writeLimit, origin, sessionCSRF, h.Revoke)
+	g.POST("/session/reauthenticate", jsonBody, session, reauthLimit, origin, sessionCSRF, h.Reauthenticate)
+	g.POST("/account/password", jsonBody, session, writeLimit, origin, sessionCSRF, h.ChangePassword)
+}
+
+// allowedMethods returns a function that maps a request path to the Allow header
+// of the routes that match it, parameters included.
+func allowedMethods(engine *gin.Engine) func(path string) string {
+	type route struct {
+		segments []string
+		method   string
+	}
+	var routes []route
 	for _, r := range engine.Routes() {
-		byPath[r.Path] = append(byPath[r.Path], r.Method)
+		routes = append(routes, route{strings.Split(r.Path, "/"), r.Method})
 	}
-	out := make(map[string]string, len(byPath))
-	for path, methods := range byPath {
+	return func(path string) string {
+		parts := strings.Split(path, "/")
+		var methods []string
+		for _, r := range routes {
+			if len(r.segments) != len(parts) {
+				continue
+			}
+			match := true
+			for i, seg := range r.segments {
+				if !strings.HasPrefix(seg, ":") && seg != parts[i] || strings.HasPrefix(seg, ":") && parts[i] == "" {
+					match = false
+					break
+				}
+			}
+			if match {
+				methods = append(methods, r.method)
+			}
+		}
 		sort.Strings(methods)
-		out[path] = strings.Join(methods, ", ")
+		return strings.Join(methods, ", ")
 	}
-	return out
 }

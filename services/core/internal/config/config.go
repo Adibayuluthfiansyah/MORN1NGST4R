@@ -31,13 +31,14 @@ import (
 )
 
 const (
-	envPrefix       = "MORNINGSTAR_"
-	envHTTPListen   = "MORNINGSTAR_HTTP_LISTEN"
-	envAllowedHosts = "MORNINGSTAR_HTTP_ALLOWED_HOSTS"
-	envLogLevel     = "MORNINGSTAR_LOG_LEVEL"
-	envLogFormat    = "MORNINGSTAR_LOG_FORMAT"
-	envDBSocketDir  = "MORNINGSTAR_DB_SOCKET_DIR"
-	envStateDir     = "MORNINGSTAR_STATE_DIR"
+	envPrefix         = "MORNINGSTAR_"
+	envHTTPListen     = "MORNINGSTAR_HTTP_LISTEN"
+	envAllowedHosts   = "MORNINGSTAR_HTTP_ALLOWED_HOSTS"
+	envLogLevel       = "MORNINGSTAR_LOG_LEVEL"
+	envLogFormat      = "MORNINGSTAR_LOG_FORMAT"
+	envAllowedOrigins = "MORNINGSTAR_HTTP_ALLOWED_ORIGINS"
+	envDBSocketDir    = "MORNINGSTAR_DB_SOCKET_DIR"
+	envStateDir       = "MORNINGSTAR_STATE_DIR"
 
 	// envWebAPIOrigin is a web-only setting and envScriptPGBase belongs to the
 	// cluster script. See Load.
@@ -53,6 +54,14 @@ type Config struct {
 	Log      Log
 	Database Database
 	State    State
+	Auth     Auth
+}
+
+// Auth locates the memory-backed directory of the bootstrap secret (D-68). It is
+// empty when XDG_RUNTIME_DIR is unset or not a clean absolute path, and account
+// setup is then refused. There is no override: the secret must not move to disk.
+type Auth struct {
+	RuntimeDir string
 }
 
 // maxSocketDirLen keeps the socket path inside the 107 bytes that a unix socket
@@ -78,6 +87,8 @@ type HTTP struct {
 	// AllowedHosts is the exact, lower-case "host:port" allow-list that the
 	// Host header is checked against.
 	AllowedHosts []string
+	// AllowedOrigins is the exact Origin allow-list for state-changing requests.
+	AllowedOrigins []string
 
 	// Timeouts follow docs/design/api/conventions.md (read-header, read,
 	// write, idle). They are not configurable in this phase.
@@ -105,7 +116,7 @@ func Load(environ []string) (Config, error) {
 			continue
 		}
 		switch key {
-		case envHTTPListen, envAllowedHosts, envLogLevel, envLogFormat, envDBSocketDir, envStateDir:
+		case envHTTPListen, envAllowedHosts, envAllowedOrigins, envLogLevel, envLogFormat, envDBSocketDir, envStateDir:
 			values[key] = value
 		case envWebAPIOrigin, envScriptPGBase:
 			// Owned and validated by apps/web (next.config.ts) and by
@@ -150,6 +161,17 @@ func Load(environ []string) (Config, error) {
 		cfg.HTTP.AllowedHosts = []string{hostPort(addr.Addr(), port), "localhost:" + port}
 	}
 
+	if raw, ok := values[envAllowedOrigins]; ok {
+		origins, err := parseAllowedOrigins(raw)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", envAllowedOrigins, err))
+		} else {
+			cfg.HTTP.AllowedOrigins = origins
+		}
+	} else {
+		cfg.HTTP.AllowedOrigins = []string{"http://127.0.0.1:3000", "http://localhost:3000"}
+	}
+
 	if raw, ok := values[envLogLevel]; ok {
 		level, err := parseLevel(raw)
 		if err != nil {
@@ -167,6 +189,11 @@ func Load(environ []string) (Config, error) {
 	}
 
 	env := plainEnv(environ)
+	if dir := env["XDG_RUNTIME_DIR"]; dir != "" {
+		if clean, err := parseDir(dir, 200); err == nil {
+			cfg.Auth.RuntimeDir = clean
+		}
+	}
 	if raw, ok := values[envDBSocketDir]; ok {
 		dir, err := parseDir(raw, maxSocketDirLen)
 		if err != nil {
@@ -292,6 +319,28 @@ func parseAllowedHosts(raw string) ([]string, error) {
 		}
 	}
 	return hosts, nil
+}
+
+func parseAllowedOrigins(raw string) ([]string, error) {
+	var origins []string
+	seen := make(map[string]bool)
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.ToLower(strings.TrimSpace(entry))
+		scheme, authority, ok := strings.Cut(entry, "://")
+		if !ok || (scheme != "http" && scheme != "https") {
+			return nil, fmt.Errorf("%q is not http://host:port or https://host:port", entry)
+		}
+		hosts, err := parseAllowedHosts(authority)
+		if err != nil || len(hosts) != 1 {
+			return nil, fmt.Errorf("%q has an invalid authority", entry)
+		}
+		origin := scheme + "://" + hosts[0]
+		if !seen[origin] {
+			seen[origin] = true
+			origins = append(origins, origin)
+		}
+	}
+	return origins, nil
 }
 
 func hostPort(ip netip.Addr, port string) string {

@@ -8,13 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/inbound"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/outbound"
 )
 
 var (
-	// ErrNotRequired is returned by Reconcile when the installation does not
-	// need a reconciliation.
-	ErrNotRequired = errors.New("recovery is not required")
 	// ErrNotNormal is returned when an operation needs a normal installation.
 	ErrNotNormal = errors.New("the installation is not in the normal recovery state")
 	// ErrMarkerWrite is returned when the recovery marker could not be written.
@@ -195,22 +193,23 @@ func (s *Service) Generation() (uint64, bool) {
 	return s.generation, s.normal
 }
 
-// Reconcile runs the reconciliation (section 6) for the human user actorUserID
-// who confirmed it. The caller has checked that user's password. Phase 1
+// Reconcile runs the reconciliation (section 6) for the human user that
+// confirmed it. The caller has checked that user's password. Phase 1
 // invalidates the authority recorded in the database, phase 2 writes the marker
 // and phase 3 returns the state to normal. Any failure leaves the installation
 // in recovery_required, or in a state that the next start resumes (section 7).
-func (s *Service) Reconcile(ctx context.Context, actorUserID, requestID string) (Status, error) {
-	if !validUUID(actorUserID) || !validUUID(requestID) {
-		return Status{}, errors.New("recovery: the actor and the request must be UUIDs")
+func (s *Service) Reconcile(ctx context.Context, req inbound.ReconcileRequest) (inbound.ReconcileCounts, error) {
+	if !validUUID(req.ActorUserID) || !validUUID(req.RequestID) || (req.NewRecoveryCodeHash != "") != validUUID(req.NewRecoveryCodeID) ||
+		(req.NewPasswordHash != "") != validUUID(req.NewCredentialID) {
+		return inbound.ReconcileCounts{}, errors.New("recovery: the actor, the request, the recovery code and the credential must be well formed")
 	}
 	in, err := s.inputs(ctx)
 	if err != nil {
-		return Status{}, err
+		return inbound.ReconcileCounts{}, err
 	}
 	d := Decide(in)
 	if d.Action != ActionRequired {
-		return Status{}, ErrNotRequired
+		return inbound.ReconcileCounts{}, inbound.ErrRecoveryNotRequired
 	}
 
 	var markerGen, dbGen uint64
@@ -231,20 +230,36 @@ func (s *Service) Reconcile(ctx context.Context, actorUserID, requestID string) 
 
 	counts, err := s.repo.BeginReconcile(ctx, outbound.ReconcileInput{
 		ExpectedGeneration: dbGen, InstanceID: instance, NewGeneration: newGen, Reason: string(d.Reason),
-		OldMarkerGeneration: markerGen, ActorUserID: actorUserID, RequestID: requestID,
+		OldMarkerGeneration: markerGen, ActorUserID: req.ActorUserID, RequestID: req.RequestID,
+		RecoveryCodeID: req.NewRecoveryCodeID, RecoveryCodeHash: req.NewRecoveryCodeHash,
+		NewCredentialID: req.NewCredentialID, NewPasswordHash: req.NewPasswordHash,
 	})
 	if err != nil {
-		return Status{}, fmt.Errorf("recovery: phase 1: %w", err)
+		return inbound.ReconcileCounts{}, fmt.Errorf("recovery: phase 1: %w", err)
 	}
 	s.logger.Warn("recovery: phase 1 committed", "reason", string(d.Reason), "new_generation", newGen, "counts", counts)
 
 	if err := s.writeMarker(ctx, instance, newGen, true); err != nil {
-		return Status{}, fmt.Errorf("phase 2: %w", err)
+		return inbound.ReconcileCounts{}, fmt.Errorf("phase 2: %w", err)
 	}
 	if err := s.repo.CompleteReconcile(ctx, newGen, string(d.Reason)); err != nil {
-		return Status{}, fmt.Errorf("recovery: phase 3: %w", err)
+		return inbound.ReconcileCounts{}, fmt.Errorf("recovery: phase 3: %w", err)
 	}
-	return s.setNormal(instance, newGen), nil
+	s.setNormal(instance, newGen)
+	return inbound.ReconcileCounts{
+		Generation: newGen, SessionsRevoked: counts.SessionsRevoked, ApprovalsRevoked: counts.ApprovalsRevoked, ApprovalsRejected: counts.ApprovalsRejected,
+		ValidationsInvalidated: counts.ValidationsInvalid, LabsRevoked: counts.LabsRevoked, JobsCancelled: counts.JobsCancelled,
+	}, nil
+}
+
+// State reports the recovery state for the authentication use case.
+func (s *Service) State() inbound.RecoveryState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return inbound.RecoveryState{
+		Normal: s.normal, Required: s.status.Required, Reason: string(s.status.Reason),
+		MarkerGeneration: s.status.MarkerGeneration, DatabaseGeneration: s.status.DatabaseGeneration, DetectedAt: s.status.DetectedAt,
+	}
 }
 
 // AdvanceWatermark writes the marker with the current highest audit sequence.
