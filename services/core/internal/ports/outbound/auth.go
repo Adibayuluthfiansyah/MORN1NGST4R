@@ -23,25 +23,6 @@ type BootstrapSecretFile interface {
 	Remove() error
 }
 
-type AuditEvent struct {
-	ActorKind   string // user, worker, system or ai
-	ActorUserID string
-	ActorRef    string
-	Action      string
-	Outcome     string // success, denied or failure
-	RequestID   string
-	Detail      map[string]any
-}
-
-// AuditLog appends audit events. Inside Transactor.InTx the event joins the
-// transaction. Outside it, the event is committed on its own, which is how a
-// denial is recorded so that a rollback cannot erase it (P-33a). M5 owns the
-// sink with bounded retries and the persistent alert and will implement this
-// port.
-type AuditLog interface {
-	Append(ctx context.Context, e AuditEvent) error
-}
-
 type User struct {
 	ID          string
 	Username    string

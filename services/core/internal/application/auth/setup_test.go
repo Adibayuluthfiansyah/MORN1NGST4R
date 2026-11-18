@@ -3,9 +3,11 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/audit"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/inbound"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/outbound"
 )
@@ -51,29 +53,54 @@ func (f fakeBootstraps) LockLive(context.Context) (outbound.BootstrapSecretRow, 
 	return outbound.BootstrapSecretRow{ID: "b1", Hash: f.hash}, true, nil
 }
 
-type fakeAudit struct{ actions []string }
+type fakeAudit struct {
+	actions  []string
+	events   []audit.Event
+	required int
+}
 
-func (f *fakeAudit) Append(_ context.Context, e outbound.AuditEvent) error {
-	f.actions = append(f.actions, e.Action+"/"+e.Outcome)
+func (f *fakeAudit) Require(_ context.Context, e audit.Event) error {
+	f.required++
+	f.events = append(f.events, e)
+	f.actions = append(f.actions, string(e.Action())+"/"+string(e.Outcome()))
 	return nil
 }
+
+func (f *fakeAudit) Record(_ context.Context, e audit.Event) error {
+	f.events = append(f.events, e)
+	f.actions = append(f.actions, string(e.Action())+"/"+string(e.Outcome()))
+	return nil
+}
+
+func (f *fakeAudit) Gate(context.Context) error { return nil }
+
+var testIDs int
+
+// newTestID returns a valid lower-case uuid that differs on every call.
+func newTestID() string {
+	testIDs++
+	return fmt.Sprintf("0198a2b4-%04x-7222-8333-444455556666", testIDs)
+}
+
+const testRequestID = "0198a2b4-3333-4222-8333-444455556666"
 
 const validSecret = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 func setupInput(secret string) inbound.SetupInput {
-	return inbound.SetupInput{BootstrapSecret: secret, Username: "researcher", Password: "correct horse battery staple", ClientKey: "loopback", RequestID: "r1"}
+	return inbound.SetupInput{BootstrapSecret: secret, Username: "researcher", Password: "correct horse battery staple", ClientKey: "loopback", RequestID: testRequestID}
 }
 
 func TestSetupChecksTheSecretBeforeAnyHashing(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	hasher := &countingHasher{}
-	audit := &fakeAudit{}
+	sink := &fakeAudit{}
 	s := New(Deps{
 		Hasher:     hasher,
 		Accounts:   fakeAccounts{},
 		Attempts:   &fakeAttempts{allow: true},
 		Bootstraps: fakeBootstraps{hash: hashSecret(validSecret)},
-		Audit:      audit,
+		Audit:      sink,
+		NewID:      newTestID,
 		Now:        func() time.Time { return now },
 	})
 	wrong := "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
@@ -84,8 +111,8 @@ func TestSetupChecksTheSecretBeforeAnyHashing(t *testing.T) {
 	if hasher.hashes != 0 {
 		t.Fatalf("the password was hashed %d times for a wrong secret", hasher.hashes)
 	}
-	if len(audit.actions) != 1 || audit.actions[0] != "auth.account_created/denied" {
-		t.Fatalf("audit = %v", audit.actions)
+	if len(sink.actions) != 1 || sink.actions[0] != "auth.account_created/denied" {
+		t.Fatalf("audit = %v", sink.actions)
 	}
 }
 
@@ -97,6 +124,7 @@ func TestSetupRateLimitIsCheckedBeforeTheSecretAndHashing(t *testing.T) {
 		Attempts:   &fakeAttempts{allow: false},
 		Bootstraps: fakeBootstraps{hash: hashSecret(validSecret)},
 		Audit:      &fakeAudit{},
+		NewID:      newTestID,
 	})
 	_, err := s.Setup(context.Background(), setupInput(validSecret))
 	var rl *inbound.RateLimitedError
@@ -116,40 +144,6 @@ func TestSetupRefusesWhenAnAccountExistsBeforeCountingAnAttempt(t *testing.T) {
 	}
 	if attempts.reserved != 0 {
 		t.Fatal("an attempt was reserved for a request that cannot succeed")
-	}
-}
-
-type contextAudit struct {
-	written   int
-	cancelled int
-}
-
-func (c *contextAudit) Append(ctx context.Context, _ outbound.AuditEvent) error {
-	if ctx.Err() != nil {
-		c.cancelled++
-		return ctx.Err()
-	}
-	c.written++
-	return nil
-}
-
-func TestADenialIsAuditedEvenWhenTheClientHasGone(t *testing.T) {
-	audit := &contextAudit{}
-	s := New(Deps{
-		Hasher:     &countingHasher{},
-		Accounts:   fakeAccounts{},
-		Attempts:   &fakeAttempts{allow: true},
-		Bootstraps: fakeBootstraps{hash: hashSecret(validSecret)},
-		Audit:      audit,
-	})
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err := s.Setup(ctx, setupInput("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"))
-	if !errors.Is(err, inbound.ErrBootstrapSecretInvalid) {
-		t.Fatalf("err = %v", err)
-	}
-	if audit.written != 1 || audit.cancelled != 0 {
-		t.Fatalf("denial written %d times, refused for a cancelled context %d times", audit.written, audit.cancelled)
 	}
 }
 

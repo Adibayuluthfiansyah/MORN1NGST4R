@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/audit"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/identity"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/inbound"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/ports/outbound"
@@ -49,7 +50,7 @@ func (s *Service) Setup(ctx context.Context, in inbound.SetupInput) (inbound.Set
 		return inbound.SetupResult{}, s.mapStoreError(err)
 	}
 	if !allowed {
-		s.auditDenied(ctx, "auth.account_created", in.RequestID, map[string]any{"reason": "rate_limited"})
+		s.auditDenied(ctx, audit.Anonymous(), "auth.account_created", in.RequestID, "rate_limited")
 		return inbound.SetupResult{}, rateLimited()
 	}
 
@@ -61,7 +62,7 @@ func (s *Service) Setup(ctx context.Context, in inbound.SetupInput) (inbound.Set
 		return inbound.SetupResult{}, inbound.ErrSetupUnavailable
 	}
 	if !secretMatches(in.BootstrapSecret, live.Hash) {
-		s.auditDenied(ctx, "auth.account_created", in.RequestID, map[string]any{"reason": "bootstrap_secret_invalid"})
+		s.auditDenied(ctx, audit.Anonymous(), "auth.account_created", in.RequestID, "bootstrap_secret_invalid")
 		return inbound.SetupResult{}, inbound.ErrBootstrapSecretInvalid
 	}
 

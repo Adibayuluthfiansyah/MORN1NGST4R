@@ -549,7 +549,7 @@ Status: design proposal. These are specifications, not executable SQL. Names fol
 - Foreign key `audit_events_fk_decision_id`: `(decision_id)` -> `policy_decisions (id)`, RESTRICT, optional
 - Foreign key `audit_events_fk_approval_id`: `(approval_id)` -> `approvals (id)`, RESTRICT, optional
 - `c1`: UNIQUE (seq)
-- `c2`: CHECK actor_kind IN (user, worker, system, ai)
+- `c2`: CHECK actor_kind IN (user, worker, system, ai, anonymous) (anonymous added by migration 00016)
 - `c3`: CHECK outcome IN (success, denied, failure)
 - `c4`: CHECK (actor_kind = user) = (actor_user_id IS NOT NULL)
 - `c5`: CHECK octet_length(detail::text) <= 8192
@@ -572,6 +572,7 @@ Status: design proposal. These are specifications, not executable SQL. Names fol
 | Index | Definition | Query pattern it serves |
 | --- | --- | --- |
 | `system_alerts_open_idx` | `(kind) WHERE cleared_at IS NULL` | Open alerts block new operations when kind = audit_retry_exhausted |
+| `system_alerts_one_open_audit_alert` | UNIQUE `(kind) WHERE kind = audit_retry_exhausted AND cleared_at IS NULL` | At most one open audit alert, so an outage cannot fill the table with alerts (migration 00016) |
 
 
 ## Domain: asset
