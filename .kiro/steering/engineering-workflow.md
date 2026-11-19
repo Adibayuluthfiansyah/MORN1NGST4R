@@ -69,7 +69,7 @@ BUILD, TEST, REVIEW, FIX, DEBT SCHEDULING, DOCUMENT, STOP.
 4. Review the result against each acceptance criterion.
 5. Fix every blocker.
 6. Run one focused technical debt assessment (below).
-7. Give every deferred item an owner milestone and dates.
+7. Give every deferred class C item an owner milestone and owner-assigned dates. If no owner milestone or date exists, mark it UNASSIGNED and schedule nothing. Never invent dates.
 8. Sync the plan and the documents that the change affects.
 9. Report the result and the Git state.
 10. Stop and wait for the owner. Do not start the next milestone before the owner approves this one.
@@ -82,7 +82,7 @@ A milestone is complete only when every acceptance criterion is met and no MUST 
 | --- | --- | --- |
 | A. MUST FIX NOW | A real bug, a security vulnerability, a breach of an acceptance criterion or a security invariant, or an architecture error that would make the next milestone build on a wrong base | Fix before the milestone closes |
 | B. FIX IN CURRENT MILESTONE | A test or document that does not yet meet the milestone's requirements | Fix before the milestone closes |
-| C. DEFERRED TECHNICAL DEBT | Work that needs a component of a later milestone, an integration that is not possible yet, or work the blueprint already assigns to another milestone | Register with an owner and dates |
+| C. DEFERRED TECHNICAL DEBT | Work that needs a component of a later milestone, an integration that is not possible yet, or work the blueprint already assigns to another milestone | Register with the owner; only the owner assigns the milestone and dates, otherwise the item is UNASSIGNED |
 | D. ACCEPTED LIMITATION | A deliberate limit that the owner approved | Record the approval. No work unless the decision changes |
 | E. OPTIONAL IMPROVEMENT | Refactoring or polish that does not affect correctness, security or acceptance | Do not do it unless there is a real benefit |
 
@@ -97,11 +97,11 @@ Each class C item is a row of the technical debt register in `plan.md` and has a
 - why it is not fixed now
 - the owner milestone, taken from the milestones that already exist in the blueprint
 - the task or acceptance criterion that will resolve it
-- when the work must start and when it must finish. If it must start in one milestone and can only finish in a later one, both are written
+- the owner-assigned start and finish dates, when the owner has set them. If no date has been established, the item is UNASSIGNED and nothing is scheduled. If it must start in one milestone and can only finish in a later one, both are recorded
 - the dependency that has to exist first
 - the consequence of passing the owner milestone without fixing it
 
-No new milestone is created for debt. If no existing milestone fits, the status is UNASSIGNED, the item is shown to the owner and nothing is scheduled until the owner decides. Dates are never invented.
+No new milestone is created for debt. If no existing milestone fits, or the owner has not assigned the dates, the status is UNASSIGNED, the item is shown to the owner and nothing is scheduled until the owner decides. Dates are never invented.
 
 ### Keeping the register true
 

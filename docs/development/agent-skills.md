@@ -1,12 +1,15 @@
 # Agent skills for development
 
-Third-party skills used while developing MORN1NGST4R with Kiro CLI V3. They guide the developer's AI agent. They are not part of the product runtime and are separate from the product's own `skills/` directory (AI skill packages for the platform).
+Third-party skills used while developing MORN1NGST4R with Kiro CLI V3, plus a local-only OpenCode adaptation of nine of them. They guide the developer's AI agent. They are not part of the product runtime and are separate from the product's own `skills/` directory (AI skill packages for the platform).
 
 ## Layout
 
 | Concern | Location |
 | --- | --- |
 | Installed skills (unmodified upstream copies) | `.kiro/skills/<name>/` |
+| OpenCode project skills (adapted, local only, git-ignored) | `.opencode/skills/<skill-id>/` |
+| OpenCode project instructions | `AGENTS.md` |
+| OpenCode provenance, pins and licenses (local only, git-ignored) | `.opencode/skills/third-party-notices/NOTICE.md` |
 | Always-on Caveman rule (generated, local only, git-ignored) | `.kiro/steering/caveman.md` |
 | Always-on Karpathy include and conflict rules | `.kiro/steering/karpathy-guidelines.md` |
 | Skill routing policy | `.kiro/steering/skill-routing.md` |
@@ -17,11 +20,41 @@ Third-party skills used while developing MORN1NGST4R with Kiro CLI V3. They guid
 | Pinned sources and install and verify script | `scripts/sync-agent-skills.sh` |
 | Upstream license copies of the installed skills (local only, git-ignored) | `.kiro/skills-licenses/` |
 
+## OpenCode project skills
+
+OpenCode loads project skills from `.opencode/skills/<skill-id>/SKILL.md`. The directory name is the skill ID. Frontmatter `name` is display only, and `description` is what OpenCode advertises for model-driven selection. Supporting files are referenced relative to `SKILL.md`. There is no `load_resource` tool, routing hook, or session bootstrap: the model calls the `skill` tool by ID.
+
+Nine skills are adapted from the Kiro payload for local OpenCode use:
+
+`brainstorming`, `writing-plans`, `executing-plans`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `karpathy-guidelines`.
+
+The copies are not verbatim. The adaptations:
+
+- Remove Kiro and Claude Code host coupling: `superpowers:` prefixes, `load_resource`, `invoke_sub_agent`, `CLAUDE_*`, hooks, and the session bootstrap.
+- Remove Git mutation, worktree, branch-finishing, and continuous-execution instructions. The owner performs all Git operations.
+- Replace `docs/superpowers/` artifacts with `.kiro/specs/<feature>/design.md` and `.kiro/specs/<feature>/plan.md`. `.kiro/specs/mvp/plan.md` remains authoritative and is never overwritten.
+- Replace generic commands with `make test`, `make test-go`, `make test-web`, `make test-db`, `make validate`, `make build-go`, and `make build-web`. `make test` runs `make test-go` and `make test-web`; `make test-db` is separate and is never implied by `make test`.
+- Add project precedence, fail-closed security, scope and approval rules, milestone gates, and the human-only finding rule: AI findings are candidates, only a human may mark a product finding Verified with a validation record and linked evidence that pass integrity checks, and evidence alone never changes a finding's status.
+- Apply the scope rule everywhere: every target, including self-owned systems and local labs, must be explicitly registered and evaluated against the applicable scope and address rules. No self-owned or local-lab exemption.
+- Keep Critical and Important findings with the owner: an agent cannot waive, defer, or silently accept one. It stops and reports; only the owner may authorize risk acceptance or deferral.
+
+`subagent-driven-development`, `dispatching-parallel-agents`, `writing-skills`, and the UI/design skills are deliberately not migrated. The Kiro copies stay unchanged in `.kiro/skills/`.
+
+`AGENTS.md` at the repository root carries the project instructions OpenCode needs: the D-63 hierarchy, security and scope invariants, owner approvals, milestone workflow, debt classes, verification commands, and Git ownership. It summarizes only the rules the agent needs and references the authoritative `.kiro/steering/` and `docs/` files instead of copying whole sections. A summary never overrides the source.
+
+Provenance, pinned commits, licenses, and adaptation notes are in `.opencode/skills/third-party-notices/NOTICE.md`. That file is git-ignored with the rest of `.opencode/skills/`.
+
+### Local-only policy and fresh clones
+
+`.opencode/skills/` is git-ignored. The adapted payload is local tooling and is not committed or redistributed. `AGENTS.md` is tracked.
+
+A fresh clone has the project instructions but neither skill payload: both `.kiro/skills/` and `.opencode/skills/` are git-ignored. First restore the Kiro payload with `scripts/sync-agent-skills.sh install` (see below). Then recreate the adapted `.opencode/skills/` locally from `.kiro/skills/` using the adaptation rules above and the notice, or work without them. There is no sync script for the adapted copies. Neither payload is required for the application to build or run.
+
 ## Git policy
 
 | Tracked | Git-ignored (local only) |
 | --- | --- |
-| `.kiro/steering/` (project-authored files only), `.kiro/specs/`, `.kiro/hooks/`, `scripts/sync-agent-skills.sh`, `docs/development/` | `.kiro/skills/` (44 MB third-party payload), `.kiro/steering/caveman.md` (generated), `.kiro/skills-licenses/`, `.kiro/skills-lock.json`, `.superpowers/`, `.worktrees/`, `.taste-skill/`, `.env*` |
+| `.kiro/steering/` (project-authored files only), `.kiro/specs/`, `.kiro/hooks/`, `scripts/sync-agent-skills.sh`, `docs/development/`, `AGENTS.md` | `.kiro/skills/` (44 MB third-party payload), `.kiro/steering/caveman.md` (generated), `.kiro/skills-licenses/`, `.kiro/skills-lock.json`, `.opencode/skills/` (adapted payload), `.superpowers/`, `.worktrees/`, `.taste-skill/`, `.env*` |
 
 ## Fresh clone setup
 
@@ -32,7 +65,7 @@ scripts/sync-agent-skills.sh install
 scripts/sync-agent-skills.sh verify
 ```
 
-Until then, `engineering-workflow.md` and `karpathy-guidelines.md` each show `[Unresolved steering reference: file:.kiro/skills/... (notFound)]` and the skill catalogue is empty. This is expected, not a path error. Needs network, git, and Node.js (npx) for UI/UX Pro Max.
+Until then, `engineering-workflow.md` and `karpathy-guidelines.md` each show `[Unresolved steering reference: file:.kiro/skills/... (notFound)]` and the skill catalogue is empty. This is expected, not a path error. The adapted `.opencode/skills/` copies are recreated only after this step, because their source is `.kiro/skills/`. Needs network, git, and Node.js (npx) for UI/UX Pro Max.
 
 No custom agents are used. Steering `inclusion: always` replaces the upstream session-start hook, and one project hook (`skill-routing.json`) supports routing.
 
@@ -68,6 +101,8 @@ No custom agents are used. Steering `inclusion: always` replaces the upstream se
 
 ## Skill routing
 
+This section describes the Kiro CLI routing policy. OpenCode has no routing hook or session bootstrap; it selects from the nine adapted skills by their frontmatter descriptions when the model calls the `skill` tool. The `load_resource` call and the `Route:` reply prefix do not exist in OpenCode.
+
 Policy: `.kiro/steering/skill-routing.md` (always-on). Enforcement nudge: `.kiro/hooks/skill-routing.json`, one `UserPromptSubmit` hook with an `agent` action that appends a fixed reminder to every prompt (no script, no logic). Each request is classified, the matching skills are loaded with `load_resource` (`skill::<name>`), and the reply starts with `Route: <class> | loaded: ... | not loaded: ...` so a missed load is visible.
 
 Why the hook exists: in fresh headless-session tests, steering alone loaded skills in 1 of 6 representative requests (the control with no routing file: 0 of 6). With the hook, all 18 runs (6 requests, 3 rounds) loaded the core skills for their class and the correct "none" cases loaded none. Optional extras in frontend runs varied between runs. Loading is not compliance: in a review test the agent loaded `requesting-code-review` but reviewed inline instead of dispatching a reviewer. Remove the hook and the policy still applies, but expect much weaker loading.
@@ -80,9 +115,10 @@ Why the hook exists: in fresh headless-session tests, steering alone loaded skil
 | Bug | `systematic-debugging` (+ TDD and verification for the fix) |
 | Review | `requesting-code-review` or `receiving-code-review` |
 | Frontend | `design-skills` steering, `ui-ux-pro-max`, then `design-system`, `ui-styling`, `design-taste-frontend` as needed |
-| Plan execution, worktrees, branch finish, parallel work, skill authoring | the matching Superpowers skill |
+| Plan execution | `executing-plans` (adapted for OpenCode) |
+| Worktrees, branch finish, parallel work, skill authoring | none. These skills are deliberately not migrated, and the owner performs every Git operation. Do not create a worktree, dispatch parallel agents, or invoke a branch-finishing skill. |
 
-No installed skill covers security assessment or documentation. Security gates (scope, approval, no unrequested commit or push) are written into the routing file and outrank every skill.
+No installed skill covers security assessment or documentation. Security gates (scope, approval, no unrequested commit or push) come from `.kiro/steering/security.md` and `AGENTS.md`, and they outrank every skill. The routing file restates them for Kiro CLI; it is not their authority.
 
 Adding or removing a skill: update the routing table in `skill-routing.md` in the same change.
 
@@ -93,7 +129,8 @@ This is a dev-agent workflow. It is unrelated to the product's runtime AI skills
 1. Review the upstream diff between the current and new commit (read scripts and hooks).
 2. Change the pin in `scripts/sync-agent-skills.sh`. For UI/UX Pro Max also update the npm integrity (`npm view ui-ux-pro-max-cli@<v> dist.integrity`).
 3. Run `scripts/sync-agent-skills.sh install` (all sources) or `install <source>` for one of `superpowers caveman taste ui-ux-pro-max karpathy`. It replaces only the managed directories and rewrites the lock file.
-4. Review and commit the changes to the script and docs. The skill payload, the generated `caveman.md` and the license copies are git-ignored.
+4. Review the changes to the script and docs and report them to the owner. The owner commits. The skill payload, the generated `caveman.md` and the license copies are git-ignored.
+5. The OpenCode copies are not produced by the script. Re-adapt them manually against the same upstream pins and update `.opencode/skills/third-party-notices/NOTICE.md`; keep `.kiro/skills/` unchanged.
 
 `scripts/sync-agent-skills.sh verify` works offline and reports any managed skill that differs from the local lock file. Do not edit installed skills. Put local behavior in steering.
 
@@ -104,6 +141,16 @@ This is a dev-agent workflow. It is unrelated to the product's runtime AI skills
 - `ui-styling/scripts/shadcn_add.py` runs `npx`. Require user approval first.
 - Superpowers visual companion: optional, local server, loads a logo from the Superpowers site. Opt out with `SUPERPOWERS_DISABLE_TELEMETRY=1`.
 - `.kiro/skills/` is about 44 MB, mostly Taste assets. It is git-ignored and recreated by the script on each checkout.
+
+## Pending owner actions
+
+This section records corrections that are outside the authorized file set for the post-migration corrective pass. The items previously listed here have been resolved by owner-approved reserved-document amendments:
+
+- `.kiro/specs/mvp/plan.md` I-1 and I-2: the header now directs workers to the `executing-plans` skill and does not name `subagent-driven-development`; the M7 status records the merge in PR #9 at commit `f6501d2`. Applied.
+- `.kiro/steering/skill-routing.md` line 50: now requires explicit registration and scope/address evaluation for every target, including self-owned systems and local labs, with no exemption; and requires a human, a validation record and linked evidence that pass integrity checks before a product finding can be marked Verified. Applied.
+- `.kiro/steering/engineering-workflow.md` step 7: now reads "Give every deferred class C item an owner milestone and owner-assigned dates. If no owner milestone or date exists, mark it UNASSIGNED and schedule nothing. Never invent dates." Applied.
+
+No unresolved items remain in this section.
 
 ## Windows
 

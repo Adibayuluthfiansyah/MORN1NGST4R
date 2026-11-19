@@ -28,6 +28,8 @@
 .worktrees/
 # Taste skill build and checker state (only created when its scripts run).
 .taste-skill/
+# Adapted OpenCode project skills. Local only, derived from .kiro/skills/; not redistributed.
+.opencode/skills/
 
 # === 2. Secrets, credentials and local configuration (security.md section 6) ====================
 .env
