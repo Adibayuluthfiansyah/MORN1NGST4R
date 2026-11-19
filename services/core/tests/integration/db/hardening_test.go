@@ -24,13 +24,13 @@ func TestFunctionsRefuseNullArguments(t *testing.T) {
 	}
 	w := e.c.Conn(t, persistence.RoleWorker)
 
-	// Argument slots: approval, job, generation, hash, scope, policy, validation.
-	good := []any{a.ID, job, int64(1), a.OperationHash, e.b.ScopeID, e.b.PolicyHash, e.b.ValidationID}
-	for i, name := range []string{"approval", "job", "generation", "operation hash", "scope version", "policy snapshot", "validation"} {
+	// Argument slots: approval, job, generation, hash, scope, policy, validation, epoch.
+	good := []any{a.ID, job, int64(1), a.OperationHash, e.b.ScopeID, e.b.PolicyHash, e.b.ValidationID, int32(1)}
+	for i, name := range []string{"approval", "job", "generation", "operation hash", "scope version", "policy snapshot", "validation", "claim epoch"} {
 		args := append([]any(nil), good...)
 		args[i] = nil
 		var reason *string
-		if err := w.QueryRow(t.Context(), `SELECT morningstar.check_approval_launch($1::uuid, $2::uuid, $3::bigint, $4::bytea, $5::uuid, $6::bytea, $7::uuid)`, args...).Scan(&reason); err != nil {
+		if err := w.QueryRow(t.Context(), `SELECT morningstar.check_approval_launch($1::uuid, $2::uuid, $3::bigint, $4::bytea, $5::uuid, $6::bytea, $7::uuid, $8::integer)`, args...).Scan(&reason); err != nil {
 			t.Fatalf("check_approval_launch with NULL %s: %v", name, err)
 		}
 		if reason == nil {
@@ -38,6 +38,9 @@ func TestFunctionsRefuseNullArguments(t *testing.T) {
 		}
 
 		var outcome, why *string
+		if i == 7 {
+			continue // the epoch is not an argument of the claim function in this position
+		}
 		// consume_approval_use(use, approval, job, epoch, generation, hash, scope, policy, validation)
 		cargs := []any{newID(), args[0], args[1], int32(1), args[2], args[3], args[4], args[5], args[6]}
 		if err := w.QueryRow(t.Context(), `SELECT outcome, reason FROM morningstar.consume_approval_use($1::uuid, $2::uuid, $3::uuid, $4::integer, $5::bigint, $6::bytea, $7::uuid, $8::bytea, $9::uuid)`, cargs...).Scan(&outcome, &why); err != nil {

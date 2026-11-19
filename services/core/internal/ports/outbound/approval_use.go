@@ -55,6 +55,8 @@ type LaunchCheck struct {
 	ApprovalID string
 	JobID      string
 	Generation uint64
+	// ClaimEpoch is the epoch of the claim that holds the running job.
+	ClaimEpoch int
 	Binding    approval.Binding
 	Operation  operation.Hash
 }

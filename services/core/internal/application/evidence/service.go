@@ -31,6 +31,14 @@ type Deps struct {
 	Repo  outbound.EvidenceRepository
 	Audit outbound.AuditSink
 	Tx    outbound.Transactor
+	// Alerts raises the alert of a failed integrity check (domain-model.md 4.4).
+	// Without it the finding is still stored and audited.
+	Alerts outbound.SystemAlerts
+	// Retention, RetentionTx and RetentionAudit run the purge with the retention
+	// role. Without them Purge is unavailable.
+	Retention      outbound.EvidenceRetention
+	RetentionTx    outbound.Transactor
+	RetentionAudit outbound.AuditSink
 
 	NewID  func() string
 	Now    func() time.Time
@@ -42,6 +50,7 @@ type Service struct{ Deps }
 var (
 	_ inbound.Evidence        = (*Service)(nil)
 	_ inbound.EvidenceCapture = (*Service)(nil)
+	_ inbound.EvidencePurge   = (*Service)(nil)
 )
 
 func New(d Deps) *Service {
@@ -100,11 +109,15 @@ func (s *Service) event(who audit.Actor, action string, outcome audit.Outcome, r
 
 // require writes the record that the operation needs before it may take effect.
 func (s *Service) require(ctx context.Context, who audit.Actor, action string, requestID string, it evidence.Item, detail map[string]any) error {
+	return s.requireWith(ctx, s.Audit, who, action, requestID, it, detail)
+}
+
+func (s *Service) requireWith(ctx context.Context, sink outbound.AuditSink, who audit.Actor, action string, requestID string, it evidence.Item, detail map[string]any) error {
 	e, err := s.event(who, action, audit.Success, "", requestID, it, detail)
 	if err != nil {
 		return err
 	}
-	return s.Audit.Require(ctx, e)
+	return sink.Require(ctx, e)
 }
 
 // record writes the record of something that already happened or was refused.

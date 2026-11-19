@@ -101,6 +101,36 @@ WHERE c.evidence_id = $1::uuid AND p.owner_user_id = $2::uuid
 ORDER BY c.checked_at DESC, c.id DESC
 LIMIT sqlc.arg(max_rows)::integer;
 
+-- name: EvidenceLinksBelong :one
+SELECT (
+    (sqlc.narg(job_id)::uuid IS NULL OR EXISTS (SELECT 1 FROM morningstar.jobs j WHERE j.id = sqlc.narg(job_id)::uuid AND j.assessment_id = sqlc.arg(assessment_id)::uuid))
+    AND (sqlc.narg(attempt_id)::uuid IS NULL OR (sqlc.narg(job_id)::uuid IS NOT NULL AND EXISTS (SELECT 1 FROM morningstar.job_attempts a WHERE a.id = sqlc.narg(attempt_id)::uuid AND a.job_id = sqlc.narg(job_id)::uuid)))
+    AND (sqlc.narg(decision_id)::uuid IS NULL OR EXISTS (SELECT 1 FROM morningstar.policy_decisions d WHERE d.id = sqlc.narg(decision_id)::uuid AND d.assessment_id = sqlc.arg(assessment_id)::uuid
+         AND (sqlc.narg(job_id)::uuid IS NULL OR d.job_id = sqlc.narg(job_id)::uuid)))
+)::boolean AS ok;
+
+-- name: KnownEvidenceKeys :many
+SELECT storage_key FROM morningstar.evidence_items WHERE store_backend = 'local_fs' AND storage_key = ANY(sqlc.arg(keys)::text[]);
+
+-- name: EvidenceDueForCheck :many
+SELECT sqlc.embed(e), sqlc.embed(s), (p.status = 'archived')::boolean AS program_archived, c.checked_at AS last_checked_at
+FROM morningstar.evidence_items e
+JOIN morningstar.evidence_status s ON s.evidence_id = e.id
+JOIN morningstar.programs p ON p.id = e.program_id
+LEFT JOIN morningstar.evidence_integrity_checks c ON c.id = s.last_check_id
+WHERE s.retention_state = 'active' AND s.integrity_state <> 'compromised' AND p.status <> 'archived'
+  AND (c.checked_at IS NULL OR c.checked_at < sqlc.arg(before)::timestamptz)
+ORDER BY c.checked_at NULLS FIRST, e.id
+LIMIT sqlc.arg(max_rows)::integer;
+
+-- name: BeginEvidencePurge :execrows
+UPDATE morningstar.evidence_status SET retention_state = 'purge_pending', updated_at = now()
+WHERE evidence_id = $1::uuid AND retention_state = 'active';
+
+-- name: CompleteEvidencePurge :execrows
+UPDATE morningstar.evidence_status SET retention_state = 'purged', purged_at = now(), purged_by = sqlc.arg(user_id)::uuid, updated_at = now()
+WHERE evidence_id = sqlc.arg(evidence_id)::uuid AND retention_state = 'purge_pending';
+
 -- name: EvidenceOwned :one
 SELECT EXISTS (
     SELECT 1 FROM morningstar.evidence_items e JOIN morningstar.programs p ON p.id = e.program_id

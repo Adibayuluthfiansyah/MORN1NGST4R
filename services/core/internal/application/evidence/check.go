@@ -34,6 +34,18 @@ func checkDetail(c evidence.CheckRecord, it evidence.Item) map[string]any {
 	return d
 }
 
+// recordFailure writes what a failed check found. The finding is already
+// stored, and it stands whether or not these records and the alert are written.
+func (s *Service) recordFailure(ctx context.Context, who audit.Actor, requestID string, it evidence.Item, c evidence.CheckRecord) {
+	s.record(ctx, who, "evidence.integrity_failed", audit.Failure, string(c.Result), requestID, it, checkDetail(c, it))
+	if s.Alerts == nil {
+		return
+	}
+	if err := s.Alerts.Raise(ctx, "evidence_integrity", map[string]any{"evidenceId": it.ID(), "result": string(c.Result), "trigger": string(c.Trigger)}); err != nil {
+		s.Logger.Error("evidence: an integrity alert was not raised", "evidenceId", it.ID())
+	}
+}
+
 // recordCheck commits a check on its own.
 func (s *Service) recordCheck(ctx context.Context, c evidence.CheckRecord) (stored evidence.CheckRecord, err error) {
 	err = s.Tx.InTx(ctx, func(ctx context.Context) error {
@@ -43,33 +55,16 @@ func (s *Service) recordCheck(ctx context.Context, c evidence.CheckRecord) (stor
 	return stored, err
 }
 
-// recordFailure writes what a failed check found. The finding is already
-// stored, and it stands whether or not these records are written.
-func (s *Service) recordFailure(ctx context.Context, who audit.Actor, requestID string, it evidence.Item, c evidence.CheckRecord) {
-	s.record(ctx, who, "evidence.integrity_failed", audit.Failure, string(c.Result), requestID, it, checkDetail(c, it))
-}
-
-// Check re-hashes the stored content and records the result (EVD-03). A match
-// is recorded together with its audit event, so that no check exists without
-// one. A failed check is committed first and audited after, because a person
-// who cannot be told must not be able to lose the finding by breaking audit.
-func (s *Service) Check(ctx context.Context, p inbound.Principal, requestID, id string) (evidence.CheckRecord, error) {
-	owner, who, rec, err := s.lookup(ctx, p, id)
+// verify hashes the stored content and records the result. A match is recorded
+// together with its audit event, so that no check exists without one. A failed
+// check is committed first and audited after, because a person who cannot be
+// told must not be able to lose the finding by breaking audit.
+func (s *Service) verify(ctx context.Context, it evidence.Item, trigger evidence.CheckTrigger, who audit.Actor, by evidence.CheckActor, requestID string) (evidence.CheckRecord, error) {
+	obs, err := s.Store.Observe(ctx, it.StorageKey(), it.Size())
 	if err != nil {
 		return evidence.CheckRecord{}, err
 	}
-	if rec.ProgramArchived {
-		return evidence.CheckRecord{}, inbound.ErrProgramArchived
-	}
-	if rec.Status.Retention == evidence.RetentionPurged {
-		return evidence.CheckRecord{}, inbound.ErrEvidencePurged
-	}
-	it := rec.Item
-	obs, err := s.Store.Observe(ctx, it.StorageKey())
-	if err != nil {
-		return evidence.CheckRecord{}, err
-	}
-	c, err := evidence.NewCheck(s.NewID(), it, obs, evidence.TriggerManual, evidence.CheckActor{Kind: evidence.ActorUser, UserID: owner})
+	c, err := evidence.NewCheck(s.NewID(), it, obs, trigger, by)
 	if err != nil {
 		return evidence.CheckRecord{}, err
 	}
@@ -93,6 +88,21 @@ func (s *Service) Check(ctx context.Context, p inbound.Principal, requestID, id 
 	s.record(ctx, who, "evidence.integrity_checked", audit.Success, "", requestID, it, checkDetail(stored, it))
 	s.recordFailure(ctx, who, requestID, it, stored)
 	return stored, nil
+}
+
+// Check re-hashes the stored content and records the result (EVD-03).
+func (s *Service) Check(ctx context.Context, p inbound.Principal, requestID, id string) (evidence.CheckRecord, error) {
+	owner, who, rec, err := s.lookup(ctx, p, id)
+	if err != nil {
+		return evidence.CheckRecord{}, err
+	}
+	if rec.ProgramArchived {
+		return evidence.CheckRecord{}, inbound.ErrProgramArchived
+	}
+	if rec.Status.Retention == evidence.RetentionPurged {
+		return evidence.CheckRecord{}, inbound.ErrEvidencePurged
+	}
+	return s.verify(ctx, rec.Item, evidence.TriggerManual, who, evidence.CheckActor{Kind: evidence.ActorUser, UserID: owner}, requestID)
 }
 
 // Open returns the content of an item after a fresh check (EVD-05). The file is

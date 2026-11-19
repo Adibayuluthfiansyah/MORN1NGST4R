@@ -255,6 +255,53 @@ func (r Evidence) List(ctx context.Context, ownerID, assessmentID string, f outb
 	return out, nil
 }
 
+func (r Evidence) LinksBelong(ctx context.Context, l outbound.EvidenceLinks) (bool, error) {
+	assessment, err := uuidOf(l.AssessmentID)
+	if err != nil {
+		return false, nil
+	}
+	job, jerr := uuidOrNull(l.JobID)
+	attempt, aerr := uuidOrNull(l.AttemptID)
+	decision, derr := uuidOrNull(l.DecisionID)
+	if jerr != nil || aerr != nil || derr != nil {
+		return false, nil
+	}
+	ok, err := r.q(ctx).EvidenceLinksBelong(ctx, sqlcgen.EvidenceLinksBelongParams{JobID: job, AssessmentID: assessment, AttemptID: attempt, DecisionID: decision})
+	return ok, wrap("check the links of evidence", err)
+}
+
+func (r Evidence) KnownKeys(ctx context.Context, keys []string) (map[string]bool, error) {
+	found, err := r.q(ctx).KnownEvidenceKeys(ctx, keys)
+	if err != nil {
+		return nil, wrap("look up evidence keys", err)
+	}
+	out := make(map[string]bool, len(found))
+	for _, k := range found {
+		out[k] = true
+	}
+	return out, nil
+}
+
+func (r Evidence) DueForCheck(ctx context.Context, before time.Time, limit int) ([]evidence.Record, error) {
+	rows, err := limitRows(limit)
+	if err != nil {
+		return nil, err
+	}
+	list, err := r.q(ctx).EvidenceDueForCheck(ctx, sqlcgen.EvidenceDueForCheckParams{Before: tsParam(before), MaxRows: rows})
+	if err != nil {
+		return nil, wrap("list evidence due for a check", err)
+	}
+	out := make([]evidence.Record, 0, len(list))
+	for _, row := range list {
+		rec, err := toRecord(row.MorningstarEvidenceItem, row.MorningstarEvidenceStatus, row.ProgramArchived, row.LastCheckedAt)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, nil
+}
+
 // RecordCheck needs a transaction: the row lock on the status is what keeps two
 // checks from overwriting each other's verdict.
 func (r Evidence) RecordCheck(ctx context.Context, c evidence.CheckRecord) (evidence.CheckRecord, evidence.Status, error) {

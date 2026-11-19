@@ -76,6 +76,27 @@ func insertSystemAlert(ctx context.Context, q DBTX, kind, detail string) error {
 	return wrap("raise a system alert", err)
 }
 
+// Alerts implements outbound.SystemAlerts. Like every write of system_alerts, it
+// lives in this file (the architecture test keeps the path single).
+type Alerts struct{ base }
+
+var _ outbound.SystemAlerts = Alerts{}
+
+func (d *DB) SystemAlerts() outbound.SystemAlerts { return Alerts{base{d.pool}} }
+
+// NewAlerts returns the adapter over pool.
+func NewAlerts(pool *pgxpool.Pool) outbound.SystemAlerts { return Alerts{base{pool}} }
+
+// Raise raises an alert of a kind that a person has to clear. The detail is
+// built by the caller from codes and ids, never from the text of an error.
+func (a Alerts) Raise(ctx context.Context, kind string, detail map[string]any) error {
+	b, err := json.Marshal(detail)
+	if err != nil {
+		return err
+	}
+	return insertSystemAlert(ctx, Querier(ctx, a.pool), kind, string(b))
+}
+
 // countsMap turns the counts of phase 1 into a detail object.
 func countsMap(c outbound.ReconcileCounts) map[string]any {
 	var m map[string]any

@@ -1,6 +1,6 @@
 # Migration plan
 
-Status: design proposal. This is a specification. No migration file exists or is authorized by this task. Migrations are Goose files `services/core/migrations/NNNNN_name.sql`, sequential, forward only (D-80). A released migration is never edited. A correction is a new migration. **M3 update (2026-11-18):** the M3 slices are implemented in `services/core/migrations` (00001 to 00007, 00013 to 00015). The result, the rulings and the differences from this design are in `.kiro/specs/mvp/plan.md`, section "Milestone M3". **M6 update (2026-11-18):** slice 00009 is implemented, and a new slice 00017 holds its indexes, triggers and grants, because 00013 to 00015 were applied before 00009 existed and are never edited. 00009 depends on 00007 only: evidence holds no reference to the asset tables of 00008 (M20). The deviations are in `.kiro/specs/mvp/plan.md`, section "Milestone M6".
+Status: design proposal. This is a specification. No migration file exists or is authorized by this task. Migrations are Goose files `services/core/migrations/NNNNN_name.sql`, sequential, forward only (D-80). A released migration is never edited. A correction is a new migration. **M3 update (2026-11-18):** the M3 slices are implemented in `services/core/migrations` (00001 to 00007, 00013 to 00015). The result, the rulings and the differences from this design are in `.kiro/specs/mvp/plan.md`, section "Milestone M3". **M6 update (2026-11-18):** slice 00009 is implemented, and a new slice 00017 holds its indexes, triggers and grants, because 00013 to 00015 were applied before 00009 existed and are never edited. 00009 depends on 00007 only: evidence holds no reference to the asset tables of 00008 (M20). The deviations are in `.kiro/specs/mvp/plan.md`, section "Milestone M6". **M7 update:** slices 00018 (job lifecycle) and 00019 (retention) are implemented, and the deviations are in section "Milestone M7".
 
 ## Strategy
 
@@ -33,6 +33,8 @@ Status: design proposal. This is a specification. No migration file exists or is
 | 00015 | `grants` | M3 and later slices | 00014 | yes | none |
 | 00016 | `audit_sink` | M5 | 00015 | yes | none |
 | 00017 | `evidence_integrity` | M6 | 00009, 00015 | yes | none |
+| 00018 | `job_lifecycle` | M7 | 00006, 00015, 00016 | yes | none |
+| 00019 | `retention` | M7 | 00002, 00017, 00018 | yes | none |
 
 ## Detail per migration
 
@@ -211,6 +213,26 @@ Status: design proposal. This is a specification. No migration file exists or is
 - Forward behavior: runs in one transaction.
 - Rollback consideration: none. Migrations are forward only.
 
+### 00018 `job_lifecycle`
+
+- Purpose: The database rules of the job state machine and of its attempts (M7, TD-M3-01, TD-M3-02, DB-11, DB-12, D-49, D-55).
+- Milestone: M7
+- Tables created: none
+- Other objects: the trigger `jobs_state_guard` (a job starts `queued` or `awaiting_approval` with no claim and no attempt, only the legal state pairs of the design are accepted, `claim_epoch` and `execution_attempts` only grow). The deferred constraint trigger `jobs_transition_parity` (a change of `jobs.state` needs a `job_transitions` row from the same transaction). The trigger `job_attempts_guard` (an attempt is inserted only for a running job with control `none` by the claim that holds it, the attempt number equals the counter, attempts stay below `max_execution_attempts` and an intrusive job has one, and the attempt names the approval use of its job). `consume_approval_use` is replaced: it locks the job and needs state `queued`, control `none` and the next epoch. `check_approval_launch` is dropped and created again with a trailing `p_claim_epoch`, and it needs the job running under that epoch with control `none`. EXECUTE stays with `ms_worker` only.
+- Depends on: 00006, 00015, 00016
+- Forward behavior: runs in one transaction. Existing job rows are not changed.
+- Rollback consideration: none. Migrations are forward only.
+
+### 00019 `retention`
+
+- Purpose: The audited purge of security-operational rows (M7, TD-M3-03, TD-M4-02, RC-B of `data-lifecycle.md`).
+- Milestone: M7
+- Tables created: none
+- Other objects: the trigger `login_attempts_guard` replaces `login_attempts_no_update_delete`: update and truncate stay refused, and a delete is allowed only while the transaction-local setting `morningstar.retention_path` names the purge function. The SECURITY DEFINER functions `retention_purge_sessions(timestamptz)` and `retention_purge_login_attempts(timestamptz)`: each refuses a cutoff younger than 30 days, and the first never deletes a session or a re-authentication grant that an approval, a policy setting, a scope version, a lab registration or a refused exclusion refers to. EXECUTE is granted to `ms_retention` only. Grants: `ms_retention` INSERT on `audit_events`, so that the purge and its event commit together, and `ms_worker` SELECT on the column `users.id` only, because the worker runs the same startup recovery check as the server and that check asks whether an account exists. Audit rows are not purged: no retention number has been approved for them, and the guard of `audit_events` still refuses every update and delete (TD-M3-03, audit part).
+- Depends on: 00002, 00017, 00018
+- Forward behavior: runs in one transaction.
+- Rollback consideration: none. Migrations are forward only.
+
 ## Grants matrix (migration 00015)
 
 Roles: `ms_migrator` owns the schema and runs migrations. `ms_api` serves HTTP. `ms_worker` runs jobs. `ms_retention` purges under the retention policy. Peer authentication maps the one OS user to all four login roles through `pg_ident.conf` (D-67), so the grants limit mistakes and SQL defects, not a compromised same-user process (D-78).
@@ -221,12 +243,12 @@ Roles: `ms_migrator` owns the schema and runs migrations. `ms_api` serves HTTP. 
 | approvals, approval_events | SELECT, INSERT, UPDATE (status, decision columns) | SELECT, UPDATE of uses_consumed only through the claim function | none |
 | approval_uses, job_attempts, job_transitions, policy_decisions | SELECT | SELECT, INSERT | none |
 | jobs | SELECT, INSERT, UPDATE (control_state, state for cancellation of queued jobs) | SELECT, UPDATE (lease, state, attempts) | none |
-| audit_events | SELECT, INSERT | SELECT, INSERT | SELECT, DELETE (rows past retention, audited) |
+| audit_events | SELECT, INSERT | SELECT, INSERT | SELECT, INSERT (the event of its own purge, 00019). No role deletes audit rows: no number is approved (TD-M3-03) |
 | evidence_items | SELECT, INSERT | SELECT, INSERT | SELECT |
 | evidence_status, evidence_integrity_checks | SELECT, INSERT, UPDATE (status) | SELECT, INSERT, UPDATE (status) | SELECT, UPDATE (retention_state, purge columns) |
 | findings and finding history | SELECT, INSERT, UPDATE (status, verification_id) | INSERT of automated transitions and candidates only | none |
 | assets and observations | SELECT | SELECT, INSERT, UPDATE (projection columns) | none |
-| Identity tables | SELECT, INSERT, UPDATE | none | none |
+| Identity tables | SELECT, INSERT, UPDATE | none (`users.id` column SELECT only, for the recovery check, 00019) | none (sessions, grants and login attempts are purged only through the two functions of 00019) |
 
 The worker role has no INSERT or UPDATE on scope, policy, approval decision columns, finding verification or user tables (P-32). The exact column lists are fixed in the M3 grant review.
 

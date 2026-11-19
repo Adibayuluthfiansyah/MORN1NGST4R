@@ -53,7 +53,7 @@ func (e *env) claim(a pgtest.Approval, job string) outbound.ApprovalClaim {
 func (e *env) launch(a pgtest.Approval, job string) outbound.LaunchCheck {
 	var h [32]byte
 	copy(h[:], a.OperationHash)
-	return outbound.LaunchCheck{ApprovalID: a.ID, JobID: job, Generation: 1, Binding: e.binding(), Operation: h}
+	return outbound.LaunchCheck{ApprovalID: a.ID, JobID: job, Generation: 1, ClaimEpoch: 1, Binding: e.binding(), Operation: h}
 }
 
 func newID() string {
@@ -488,6 +488,26 @@ func TestRevocationAndClaimRaceKeepsTheCounterTrue(t *testing.T) {
 	}
 }
 
+// runJob moves a claimed job to running under epoch 1, the way the claim transaction of the worker does.
+func (e *env) runJob(t *testing.T, job string) {
+	t.Helper()
+	ctx := t.Context()
+	tx, err := e.c.Owner(t).Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if _, err := tx.Exec(ctx, `UPDATE morningstar.jobs SET state = 'running', claim_epoch = 1, lease_owner = 'test', lease_expires_at = now() + interval '1 minute', approval_use_id = (SELECT id FROM morningstar.approval_uses WHERE job_id = $1) WHERE id = $1`, job); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO morningstar.job_transitions (id, job_id, from_state, to_state, control_state, claim_epoch, actor_kind) VALUES (uuidv7(), $1, 'queued', 'running', 'none', 1, 'worker')`, job); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCheckLaunch(t *testing.T) {
 	e := newEnv(t)
 	a := e.c.SeedApproval(t, e.b, pgtest.ApprovalSpec{})
@@ -500,8 +520,17 @@ func TestCheckLaunch(t *testing.T) {
 	if _, err := e.uses.Claim(t.Context(), e.claim(a, job)); err != nil {
 		t.Fatal(err)
 	}
+	if got := reasonOf(t, e.uses.CheckLaunch(t.Context(), e.launch(a, job))); got != approval.ReasonInvalidInput {
+		t.Errorf("a job that is still queued: reason = %s, want %s", got, approval.ReasonInvalidInput)
+	}
+	e.runJob(t, job)
 	if err := e.uses.CheckLaunch(t.Context(), e.launch(a, job)); err != nil {
 		t.Errorf("after the claim: %v", err)
+	}
+	stale := e.launch(a, job)
+	stale.ClaimEpoch = 2
+	if got := reasonOf(t, e.uses.CheckLaunch(t.Context(), stale)); got != approval.ReasonInvalidInput {
+		t.Errorf("another epoch: reason = %s, want %s", got, approval.ReasonInvalidInput)
 	}
 	if c, rows := e.counts(t, a.ID); c != 1 || rows != 1 {
 		t.Errorf("the check consumed something: counter %d, rows %d", c, rows)
@@ -536,6 +565,7 @@ func TestCheckLaunchRefusesAnExpiredApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Expiry stops a new launch (D-48).
+	e.runJob(t, job)
 	e.c.Expire(t, a.ID)
 	if got := reasonOf(t, e.uses.CheckLaunch(t.Context(), e.launch(a, job))); got != approval.ReasonExpired {
 		t.Errorf("reason = %s, want %s", got, approval.ReasonExpired)

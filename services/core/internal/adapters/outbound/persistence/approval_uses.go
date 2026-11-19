@@ -93,11 +93,11 @@ func (s *ApprovalUses) Claim(ctx context.Context, c outbound.ApprovalClaim) (out
 // CheckLaunch checks, immediately before a launch, that the job holds a use of
 // a live approval. It consumes nothing.
 func (s *ApprovalUses) CheckLaunch(ctx context.Context, c outbound.LaunchCheck) error {
-	if !validUUID(c.ApprovalID) || !validUUID(c.JobID) || !bindingValid(c.Binding) || c.Operation == [32]byte{} || c.Generation > maxGeneration {
+	if c.ClaimEpoch < 1 || !validUUID(c.ApprovalID) || !validUUID(c.JobID) || !bindingValid(c.Binding) || c.Operation == [32]byte{} || c.Generation > maxGeneration {
 		return denial(approval.ReasonInvalidInput)
 	}
 	reason, err := sqlcgen.New(Querier(ctx, s.pool)).CheckApprovalLaunch(ctx, sqlcgen.CheckApprovalLaunchParams{
-		ApprovalID: toUUID(c.ApprovalID), JobID: toUUID(c.JobID), Generation: int64(c.Generation), OperationHash: c.Operation[:],
+		ApprovalID: toUUID(c.ApprovalID), JobID: toUUID(c.JobID), Generation: int64(c.Generation), ClaimEpoch: int32(c.ClaimEpoch), OperationHash: c.Operation[:],
 		ScopeVersionID: toUUID(c.Binding.ScopeVersionID), PolicySnapshotHash: c.Binding.PolicySnapshot[:], ValidationID: toUUID(c.Binding.ValidationID),
 	})
 	if err != nil {

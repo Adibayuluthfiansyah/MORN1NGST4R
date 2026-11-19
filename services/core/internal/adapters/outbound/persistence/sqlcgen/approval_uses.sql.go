@@ -14,7 +14,7 @@ import (
 const checkApprovalLaunch = `-- name: CheckApprovalLaunch :one
 SELECT coalesce(morningstar.check_approval_launch(
     $1::uuid, $2::uuid, $3::bigint, $4::bytea,
-    $5::uuid, $6::bytea, $7::uuid), '')::text AS reason
+    $5::uuid, $6::bytea, $7::uuid, $8::integer), '')::text AS reason
 `
 
 type CheckApprovalLaunchParams struct {
@@ -25,6 +25,7 @@ type CheckApprovalLaunchParams struct {
 	ScopeVersionID     pgtype.UUID
 	PolicySnapshotHash []byte
 	ValidationID       pgtype.UUID
+	ClaimEpoch         int32
 }
 
 // An empty reason means that the launch check passed.
@@ -37,6 +38,7 @@ func (q *Queries) CheckApprovalLaunch(ctx context.Context, arg CheckApprovalLaun
 		arg.ScopeVersionID,
 		arg.PolicySnapshotHash,
 		arg.ValidationID,
+		arg.ClaimEpoch,
 	)
 	var reason string
 	err := row.Scan(&reason)

@@ -1,6 +1,6 @@
 # Data lifecycle
 
-Status: design proposal. Retention numbers are proposals (DQ-07). Nothing here deletes data today.
+Status: design proposal. Retention numbers are proposals (DQ-07). **M7 update:** the worker deletes sessions, re-authentication grants and login attempts 30 days after they ended (RC-B, migration 00019 and `internal/application/retention`), removes orphan and temporary evidence files older than one hour, and purges evidence content when a person asks (`Service.Purge`). Audit rows are not deleted: no number is approved for them.
 
 ## 1. Distinctions
 
@@ -35,7 +35,7 @@ Status: design proposal. Retention numbers are proposals (DQ-07). Nothing here d
 | Evidence purge | Human action under the retention role: content removed, `evidence_status` set to purged with actor and time, audit event, finding verifications that cite it keep the hash snapshot. A purged item cannot support a new verification. | D-77. |
 | Report finalization | The report and its inclusion rows become immutable. | Reports are exports of record. |
 | Idempotency and session cleanup | A sweep deletes expired rows older than 30 days (RC-B). | Operational data only. |
-| Audit retention | Kept indefinitely in the MVP. A later procedure may delete rows older than the configured period under `ms_retention`, always writing a `retention.purged` audit event first. | SEC 9, SEC 13. |
+| Audit retention | Kept indefinitely in the MVP (owner decision of 2026-11-19, accepted MVP limitation). Nothing deletes or purges audit rows and `audit_events_guard` refuses every update and delete. A later procedure needs an explicit product, privacy and operational decision first, and would always write a `retention.purged` audit event under `ms_retention`. | SEC 9, SEC 13. |
 
 ## 4. Orphan detection
 
@@ -56,6 +56,7 @@ Run by the sweep (`WRK-08`) and reported as `system_alerts`. Nothing is deleted 
 ## 5. Backup and recovery
 
 - Backups: `pg_dump` of the `morningstar` database plus a copy of the evidence directory, both with owner-only permissions and never inside the repository (`.gitignore`, D-84). The two must come from the same moment. A restore re-hashes evidence and records the result.
+- **Back up and restore the database and the evidence directory together (M7).** The worker removes a file in the evidence directory that no row names one hour after it was written (the orphan grace period), and it deletes sessions, grants and login attempts 30 days after they ended. Restore both from the same point in time. If the database is restored without the files that its rows name, the integrity check marks those items `missing`. If files are restored without their rows, the sweep removes them. While you restore, keep the worker stopped. The worker also waits until the recovery check passes, so a restored database that needs reconciliation holds the worker back.
 - Backups hold target data, audit rows and password hashes, so they carry at least the permissions of the source (SEC 12). They hold no secret value, because secrets live in the Secret Service (D-52). A restore on another machine therefore loses provider keys and needs them re-entered. It also lacks the recovery marker, so it starts in `recovery_required` (`marker_missing`).
 - **Restore detection and recovery (DB-27, DB-28, DQ-17).** A backup older than the latest approval use would bring back a consumed use as unconsumed and an older scope version as current. The database cannot detect its own restore. An external marker file outside the backup set holds a recovery generation and an audit watermark, and startup compares it with the restored database. A mismatch puts the installation in `recovery_required` and only the reconciliation (AUTH-10) can leave that state. The procedure, the invalidation list and the limits are in `recovery-generation.md`. The marker must never be part of a backup. A snapshot that restores the marker together with the database is not detected.
 - Point-in-time recovery and replication are not designed for the MVP.

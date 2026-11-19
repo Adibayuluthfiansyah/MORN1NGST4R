@@ -63,6 +63,16 @@ func (s *Service) Capture(ctx context.Context, in inbound.CaptureInput) (evidenc
 		return evidence.Item{}, err
 	}
 
+	ok, err := s.Repo.LinksBelong(ctx, outbound.EvidenceLinks{AssessmentID: in.AssessmentID, JobID: in.JobID, AttemptID: in.AttemptID, DecisionID: in.DecisionID})
+	if err != nil {
+		return evidence.Item{}, mapError(err)
+	}
+	if !ok {
+		// A job, an attempt or a decision of another assessment must not give an
+		// artifact the provenance of this one (TD-M6-05).
+		return evidence.Item{}, invalidField("links", "not_in_assessment")
+	}
+
 	w, err := s.Store.Put(ctx, it.StorageKey(), data)
 	if errors.Is(err, outbound.ErrEvidenceTooLarge) {
 		return evidence.Item{}, invalidField("content", "too_large")

@@ -1,8 +1,7 @@
 // Package bootstrap assembles the dependencies of each runtime.
 //
-// There is one composition per process. This file composes the server. The
-// worker composition does not exist yet (milestone M7), so no worker
-// dependency is created here.
+// There is one composition per process. server.go composes the server and
+// worker.go composes the worker. Neither creates a dependency of the other.
 package bootstrap
 
 import (

@@ -7,7 +7,7 @@
 | Product | MORN1NGST4R (canonical technical name `morningstar`) |
 | Document | Product Requirements Document |
 | Version | 0.2 |
-| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold, the M1 scope package, the M2 policy and approval domain, the M3 persistence layer (PostgreSQL schema, atomic approval consumption, recovery generation, database readiness probe), the M4 authentication and session layer (one account, Argon2id, server-side sessions, CSRF, Host and Origin checks, login rate limit, bootstrap secret, recovery code, re-authentication grants, recovery gating) and the M5 audit event model and sink (the audit domain, the `AuditSink` port, the PostgreSQL adapter with bounded retries and a persistent alert). |
+| Status | Draft. Foundation decisions closed in Round 6 (D-63 to D-85). D-86 (record 0004) keeps the health endpoints in the MVP. D-87 to D-91 (record 0005) close M1. Nothing is implemented except the Phase 1 scaffold, the M1 scope package, the M2 policy and approval domain, the M3 persistence layer (PostgreSQL schema, atomic approval consumption, recovery generation, database readiness probe), the M4 authentication and session layer (one account, Argon2id, server-side sessions, CSRF, Host and Origin checks, login rate limit, bootstrap secret, recovery code, re-authentication grants, recovery gating) and the M5 audit event model and sink (the audit domain, the `AuditSink` port, the PostgreSQL adapter with bounded retries and a persistent alert), the M6 evidence layer, and the M7 worker and job lifecycle (claim, lease, fencing, cancellation, retention and maintenance, with adapters that refuse until the sandbox of M8 and the rule sources of M16 to M19 exist). |
 | Last updated | 2026-11-16 |
 | Implementation state | The Phase 1 scaffold exists: a Go server skeleton with the two health endpoints (NFR-OBS-003), configuration loading and a Next.js shell. The M1 scope package (`services/core/internal/domain/scope`) implements the parsing and evaluation core of FR-SCOPE-001 and FR-SCOPE-002 for names and literals. Nothing uses it yet, so neither requirement is met end to end. The M2 packages (`internal/domain/actor`, `operation`, `approval` and the decision function `scope.Decide`) implement the pure domain part of FR-POLICY-001, FR-APPROVAL-001 to FR-APPROVAL-004 and FR-APPROVAL-006: the approval record and its lifecycle, the consumption state machine, the operation hash, the class derivation and the authorization value. M3 adds the PostgreSQL schema, the atomic consumption of approval uses and the recovery generation, but no use case and no worker call them yet, so none of these requirements is met end to end. M4 implements FR-AUTH-001 and the server side of FR-AUTH-002 and FR-APPROVAL-005 (the re-authentication grant, not the approval use case, which is M19). No other requirement in this document is implemented. Two throwaway feasibility spikes exist (`scripts/spikes/`). |
 | Owner | The project owner (single decision authority) |
@@ -338,7 +338,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 With two workers claiming one job, exactly one consumption exists for the pair. AC2 A second consumption for the same pair is impossible by database constraint. AC3 A retry claim reuses the original record. AC4 A denial before launch is not counted as an attempt and does not restore the use. AC5 An intrusive job whose lease expires is failed, not retried. AC6 A rerun of an intrusive operation needs a new job and a new approval. AC7 A retry launch does not start before the previous attempt's process tree is confirmed terminated.
 - **Dependencies:** FR-APPROVAL-001, FR-JOB-001.
 - **Security:** T-16, T-17.
-- **MVP status:** M2 domain part and M3 persistence implemented (consumption state machine, atomic consumption in PostgreSQL, G-consume with real concurrent transactions). Planned: M7, M19.
+- **MVP status:** M2 domain part, M3 persistence and the M7 worker side are implemented (consumption state machine, atomic consumption in PostgreSQL, G-consume with real concurrent transactions, the claim and launch of the worker with the epoch rules of migration 00018). Planned: M19 (the approval use cases).
 - **Source:** Decided. D-30, D-49, D-55, D-64 (choice 12), `SEC 4`.
 
 #### FR-APPROVAL-003 Expiry, revocation and running work
@@ -348,7 +348,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 An expired approval refuses launch. AC2 A launched operation is killed at its maximum duration. AC3 After revocation, queued jobs are cancelled and running process trees are gone within 30 seconds, measured on the reference host (gate G-revoke).
 - **Dependencies:** FR-JOB-001, FR-TOOL-002.
 - **Security:** T-15.
-- **MVP status:** Conditional. Heartbeat and kill timing are unmeasured (O-35, gate G-revoke). M2 domain part implemented (expiry, revocation and the running-work rule). Planned: M7, M19.
+- **MVP status:** Conditional. Heartbeat and kill timing are unmeasured on the baseline (O-35, gate G-revoke). M2 domain part implemented (expiry, revocation and the running-work rule). M7 measured the stop with a fake process runner (about 3 s for a live worker, about 12 s for a dead worker, with the provisional timing); the real kill time needs the sandbox of M8. Planned: M8, M19.
 - **Source:** Decided requirement. D-48, `SEC 3`, `SEC 4`.
 
 #### FR-APPROVAL-004 Approval classes
@@ -412,7 +412,7 @@ Priorities: Must, Should, Could, Won't (for the MVP). "Planned (M1)" means the p
 - **Acceptance criteria:** AC1 A job whose worker is killed is redelivered or failed according to its class. AC2 A stale worker's late writes are rejected. AC3 Cancelling a job ends its tool process tree. AC4 The worker exposes no network listener.
 - **Dependencies:** FR-AUDIT-001.
 - **Security:** T-14, T-64.
-- **MVP status:** Planned (M7).
+- **MVP status:** M7 implemented the worker side: claim, lease, heartbeat, fencing, cancellation, the passive retry policy and the process `cmd/worker`, which exposes no listener. Job creation is planned (M21), and no tool process runs before M8 and M10.
 - **Source:** Decided. D-03, D-62, D-80 (custom queue, P-36 fencing, bounded passive retries); `P 8`.
 
 ### Tools, reconnaissance and probing

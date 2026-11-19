@@ -14,4 +14,4 @@ FROM morningstar.consume_approval_use(
 -- An empty reason means that the launch check passed.
 SELECT coalesce(morningstar.check_approval_launch(
     sqlc.arg(approval_id)::uuid, sqlc.arg(job_id)::uuid, sqlc.arg(generation)::bigint, sqlc.arg(operation_hash)::bytea,
-    sqlc.arg(scope_version_id)::uuid, sqlc.arg(policy_snapshot_hash)::bytea, sqlc.arg(validation_id)::uuid), '')::text AS reason;
+    sqlc.arg(scope_version_id)::uuid, sqlc.arg(policy_snapshot_hash)::bytea, sqlc.arg(validation_id)::uuid, sqlc.arg(claim_epoch)::integer), '')::text AS reason;

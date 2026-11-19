@@ -107,3 +107,11 @@ type CaptureInput struct {
 type EvidenceCapture interface {
 	Capture(ctx context.Context, in CaptureInput) (evidence.Item, error)
 }
+
+// EvidencePurge removes the content of an item and keeps its metadata and hash
+// (D-77). It is a human action, run with the retention role. No route offers it
+// in the MVP (domain-model.md section 3): a command or a screen of a later
+// milestone calls it.
+type EvidencePurge interface {
+	Purge(ctx context.Context, p Principal, requestID, id string) error
+}

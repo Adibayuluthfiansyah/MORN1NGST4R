@@ -38,8 +38,11 @@ type EvidenceStore interface {
 	// MaxBytes is the largest content that Put accepts and Read returns.
 	MaxBytes() int64
 	Put(ctx context.Context, key string, content []byte) (EvidenceWritten, error)
-	// Observe hashes the file without keeping its bytes.
-	Observe(ctx context.Context, key string) (evidence.Observation, error)
+	// Observe hashes the file without keeping its bytes. It reads at most limit
+	// bytes (the size of the row): a longer file is reported by its size, without
+	// a hash, and Check calls that a size mismatch. limit above MaxBytes is
+	// ErrEvidenceTooLarge.
+	Observe(ctx context.Context, key string, limit int64) (evidence.Observation, error)
 	// Read returns the observation and the bytes that were hashed. The bytes are
 	// nil when the file is missing or unsafe, or when it is larger than limit
 	// (the observation then carries the size but no hash, and Check reports a
@@ -48,6 +51,21 @@ type EvidenceStore interface {
 	// Remove deletes the file. A missing file is not an error. It is for the
 	// orphan of a capture whose metadata was not stored.
 	Remove(ctx context.Context, key string) error
+	// List names every entry of the directory, for the sweep.
+	List(ctx context.Context) ([]StoredFile, error)
+	// RemoveTemporary deletes the temporary file of an interrupted write, and
+	// refuses the name of anything else.
+	RemoveTemporary(ctx context.Context, name string) error
+}
+
+// StoredFile is an entry of the evidence directory. IsKey says that the name is
+// the id of an item, Temporary that it is the name of an unpublished write, and
+// Special that the entry is not a regular file (a link, a directory).
+type StoredFile struct {
+	Name                      string
+	ModTime                   time.Time
+	Size                      int64
+	IsKey, Temporary, Special bool
 }
 
 // EvidenceCursor is the position after the last row of a page.
@@ -99,4 +117,27 @@ type EvidenceRepository interface {
 	RecordCheck(ctx context.Context, c evidence.CheckRecord) (evidence.CheckRecord, evidence.Status, error)
 	// ListChecks returns ErrEvidenceNotFound when the item is not the owner's.
 	ListChecks(ctx context.Context, ownerID, evidenceID string, q EvidencePageQuery) ([]evidence.CheckRecord, error)
+	// LinksBelong reports whether the job, the attempt and the decision that a
+	// capture names belong to the assessment, and to each other (TD-M6-05).
+	LinksBelong(ctx context.Context, l EvidenceLinks) (bool, error)
+	// KnownKeys says which of the storage keys have a row, for the sweep of
+	// orphan files.
+	KnownKeys(ctx context.Context, keys []string) (map[string]bool, error)
+	// DueForCheck returns up to limit items that the integrity sweep should look
+	// at: not purged, not compromised, in a program that is not archived, and not
+	// checked since before. The oldest check comes first.
+	DueForCheck(ctx context.Context, before time.Time, limit int) ([]evidence.Record, error)
+}
+
+// EvidenceLinks names where a capture came from.
+type EvidenceLinks struct{ AssessmentID, JobID, AttemptID, DecisionID string }
+
+// EvidenceRetention moves the retention state of an item. Only the retention
+// role may change it (migration 00017), so an implementation runs with that
+// role. The callers check ownership first, through EvidenceRepository.
+type EvidenceRetention interface {
+	// BeginPurge moves an active item to purge_pending. It reports whether it did.
+	BeginPurge(ctx context.Context, id string) (bool, error)
+	// CompletePurge moves a pending item to purged and names who decided.
+	CompletePurge(ctx context.Context, id, userID string) (bool, error)
 }
