@@ -70,7 +70,7 @@ Every state column has a named CHECK. Every state with history has a transition 
 | findings | candidate, needs_review, inconclusive, false_positive, not_reproducible, awaiting_human_verification, verified | D-75 table, see `finding_transitions` constraints. Automation: create->candidate, candidate->needs_review only. Verified only by a user from awaiting_human_verification. | human, automation (two transitions only) | FND-01, FND-04 to FND-07 |
 | reports | draft, final | draft->final (needs a generated file) | human | RPT-05, RPT-06 |
 | evidence_status.integrity_state | unchecked, ok, compromised, missing | unchecked->ok, any->compromised, any->missing. compromised is sticky (DQ-01). | worker, system, human-triggered check | EVD-03, EVD-05, sweeps |
-| evidence_status.retention_state | active, purge_pending, purged | active->purge_pending->purged, never backwards | human via the retention role | post-MVP purge procedure |
+| evidence_status.retention_state | active, purge_pending, purged | active->purge_pending->purged, never backwards | human via the retention role | `Service.Purge` of `internal/application/evidence` (M7). No route or command offers it yet: a later milestone calls it |
 | recovery_state | normal, reconciling | normal->reconciling (phase 1), reconciling->normal (phase 3). generation only increases. See `recovery-generation.md`. | human (AUTH-10) and start-up resume | AUTH-10 |
 | sessions | active, revoked (expiry derived) | active->revoked | human, system | AUTH-04, AUTH-06, AUTH-08, AUTH-09 |
 
@@ -214,6 +214,9 @@ Every state-changing endpoint writes exactly one event with its action name, out
 | `policy.decision_denied` | E1 to E4 | Every denial with reasons, written in its own transaction |
 | `evidence.captured` | WRK-04 | Evidence metadata committed |
 | `evidence.integrity_failed` | EVD-03, EVD-05, sweeps | Hash mismatch or missing content |
+| `evidence.purge_requested` | retention procedure | The content of an item is marked for purge (M7). Added to the catalog in M7, with `evidence.purged`, because the purge procedure of D-77 writes them |
+| `evidence.purged` | retention procedure | The content was removed and the item is purged (M7). Its metadata and hash stay |
+| `retention.purged` | worker maintenance | Operational rows (sessions, re-authentication grants, login attempts) were purged past their age floor (M7, RC-B). Audit rows are not purged |
 | `finding.auto_created` | WRK-04 | Automated Candidate |
 | `finding.auto_submitted` | WRK-04 | Automated Needs Review |
 | `ai.transmission` | WRK-09 | Provider, program, size, digest |

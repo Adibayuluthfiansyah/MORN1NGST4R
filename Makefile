@@ -31,14 +31,18 @@ test-web: ## Type check and Vitest
 deps-web: ## Install the pinned web dependencies (npm ci, install scripts disabled)
 	cd $(WEB) && npm ci
 
-build-go: ## Build the server binary into services/core/bin/
+build-go: ## Build the server and worker binaries into services/core/bin/
 	cd $(CORE) && go build -trimpath -o bin/server ./cmd/server
+	cd $(CORE) && go build -trimpath -o bin/worker ./cmd/worker
 
 build-web: ## Production build of the web UI (MORNINGSTAR_API_ORIGIN is read at build time)
 	cd $(WEB) && npm run build
 
 run-server: ## Start the API on 127.0.0.1:8080 (see .env.example for settings)
 	cd $(CORE) && go run ./cmd/server
+
+run-worker: ## Start the worker (jobs and maintenance). It waits until the server has initialized the installation
+	cd $(CORE) && go run ./cmd/worker
 
 run-web: ## Start the web UI dev server on 127.0.0.1:3000
 	cd $(WEB) && npm run dev

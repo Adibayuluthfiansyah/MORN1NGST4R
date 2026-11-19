@@ -108,7 +108,7 @@ func TestAppendOnlyTriggersExist(t *testing.T) {
 	c.Fresh(t)
 	conn := c.Owner(t)
 
-	appendOnly := []string{"login_attempts", "program_rules_versions", "scope_rules", "lab_registration_ranges", "target_validation_targets",
+	appendOnly := []string{"program_rules_versions", "scope_rules", "lab_registration_ranges", "target_validation_targets",
 		"assessment_transitions", "operations", "policy_decisions", "approval_events", "approval_uses", "job_transitions"}
 	updatable := map[string]string{ // tables that allow UPDATE of a few columns and never DELETE
 		"user_credentials": "forbid_update_except", "policy_settings": "forbid_update_except", "scope_versions": "forbid_update_except",
@@ -155,6 +155,13 @@ func TestAppendOnlyTriggersExist(t *testing.T) {
 		if !has(tbl, "forbid_truncate", before|truncate) {
 			t.Errorf("%s has no enabled BEFORE TRUNCATE trigger", tbl)
 		}
+	}
+	// login_attempts is append-only except for the one path of the retention function (migration 00019).
+	if !has("login_attempts", "login_attempts_guard", row|before|upd|del) {
+		t.Error("login_attempts has no enabled BEFORE UPDATE OR DELETE guard")
+	}
+	if !has("login_attempts", "forbid_truncate", before|truncate) {
+		t.Error("login_attempts has no enabled BEFORE TRUNCATE trigger")
 	}
 	for tbl, fn := range updatable {
 		if !has(tbl, fn, row|before|upd) {
@@ -214,10 +221,11 @@ func TestAppendOnlyTablesRefuseChangesEvenFromTheOwner(t *testing.T) {
 	}
 }
 
-// DB-17: audit rows are appended and never changed or deleted. M3 builds no
-// purge path: the retention role reads the table and nothing else. The purge
-// procedure (an audited function with an age floor) is a later milestone
-// (TD-M3-03), so no role, not even the owner, can remove an audit row today.
+// DB-17: audit rows are appended and never changed or deleted. No purge path
+// exists: the retention role may read the table and insert the event of its
+// own purge (migration 00019). The purge of audit rows needs an approved
+// number first (TD-M3-03, audit part), so no role, not even the owner, can
+// remove an audit row today.
 func TestAuditEventsAreAppendOnly(t *testing.T) {
 	e := newEnv(t)
 	owner := e.c.Owner(t)

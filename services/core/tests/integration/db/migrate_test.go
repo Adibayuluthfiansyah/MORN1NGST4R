@@ -32,7 +32,7 @@ func TestMigrationsApplyInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []int64{0, 1, 2, 3, 4, 5, 6, 7, 9, 13, 14, 15, 16, 17}
+	want := []int64{0, 1, 2, 3, 4, 5, 6, 7, 9, 13, 14, 15, 16, 17, 18, 19}
 	if len(got) != len(want) {
 		t.Fatalf("applied versions = %v, want %v", got, want)
 	}

@@ -11,6 +11,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const beginEvidencePurge = `-- name: BeginEvidencePurge :execrows
+UPDATE morningstar.evidence_status SET retention_state = 'purge_pending', updated_at = now()
+WHERE evidence_id = $1::uuid AND retention_state = 'active'
+`
+
+func (q *Queries) BeginEvidencePurge(ctx context.Context, dollar_1 pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, beginEvidencePurge, dollar_1)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completeEvidencePurge = `-- name: CompleteEvidencePurge :execrows
+UPDATE morningstar.evidence_status SET retention_state = 'purged', purged_at = now(), purged_by = $1::uuid, updated_at = now()
+WHERE evidence_id = $2::uuid AND retention_state = 'purge_pending'
+`
+
+type CompleteEvidencePurgeParams struct {
+	UserID     pgtype.UUID
+	EvidenceID pgtype.UUID
+}
+
+func (q *Queries) CompleteEvidencePurge(ctx context.Context, arg CompleteEvidencePurgeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeEvidencePurge, arg.UserID, arg.EvidenceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const evidenceAssessment = `-- name: EvidenceAssessment :one
 
 SELECT a.program_id::text AS program_id, a.raw_evidence_capture AS raw_capture, (p.status = 'archived')::boolean AS program_archived
@@ -53,6 +84,112 @@ func (q *Queries) EvidenceAssessmentOwned(ctx context.Context, arg EvidenceAsses
 	var owned bool
 	err := row.Scan(&owned)
 	return owned, err
+}
+
+const evidenceDueForCheck = `-- name: EvidenceDueForCheck :many
+SELECT e.id, e.program_id, e.assessment_id, e.job_id, e.attempt_id, e.target_id, e.kind, e.store_backend, e.storage_key, e.sha256, e.size_bytes, e.content_type, e.redaction_state, e.sensitivity, e.captured_at, e.origin, e.tool_key, e.tool_version, e.tool_binary_sha256, e.operation_hash, e.decision_id, e.redacted_args, e.created_at, s.evidence_id, s.integrity_state, s.last_check_id, s.retention_state, s.purged_at, s.purged_by, s.compromised_at, s.updated_at, (p.status = 'archived')::boolean AS program_archived, c.checked_at AS last_checked_at
+FROM morningstar.evidence_items e
+JOIN morningstar.evidence_status s ON s.evidence_id = e.id
+JOIN morningstar.programs p ON p.id = e.program_id
+LEFT JOIN morningstar.evidence_integrity_checks c ON c.id = s.last_check_id
+WHERE s.retention_state = 'active' AND s.integrity_state <> 'compromised' AND p.status <> 'archived'
+  AND (c.checked_at IS NULL OR c.checked_at < $1::timestamptz)
+ORDER BY c.checked_at NULLS FIRST, e.id
+LIMIT $2::integer
+`
+
+type EvidenceDueForCheckParams struct {
+	Before  pgtype.Timestamptz
+	MaxRows int32
+}
+
+type EvidenceDueForCheckRow struct {
+	MorningstarEvidenceItem   MorningstarEvidenceItem
+	MorningstarEvidenceStatus MorningstarEvidenceStatus
+	ProgramArchived           bool
+	LastCheckedAt             pgtype.Timestamptz
+}
+
+func (q *Queries) EvidenceDueForCheck(ctx context.Context, arg EvidenceDueForCheckParams) ([]EvidenceDueForCheckRow, error) {
+	rows, err := q.db.Query(ctx, evidenceDueForCheck, arg.Before, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvidenceDueForCheckRow
+	for rows.Next() {
+		var i EvidenceDueForCheckRow
+		if err := rows.Scan(
+			&i.MorningstarEvidenceItem.ID,
+			&i.MorningstarEvidenceItem.ProgramID,
+			&i.MorningstarEvidenceItem.AssessmentID,
+			&i.MorningstarEvidenceItem.JobID,
+			&i.MorningstarEvidenceItem.AttemptID,
+			&i.MorningstarEvidenceItem.TargetID,
+			&i.MorningstarEvidenceItem.Kind,
+			&i.MorningstarEvidenceItem.StoreBackend,
+			&i.MorningstarEvidenceItem.StorageKey,
+			&i.MorningstarEvidenceItem.Sha256,
+			&i.MorningstarEvidenceItem.SizeBytes,
+			&i.MorningstarEvidenceItem.ContentType,
+			&i.MorningstarEvidenceItem.RedactionState,
+			&i.MorningstarEvidenceItem.Sensitivity,
+			&i.MorningstarEvidenceItem.CapturedAt,
+			&i.MorningstarEvidenceItem.Origin,
+			&i.MorningstarEvidenceItem.ToolKey,
+			&i.MorningstarEvidenceItem.ToolVersion,
+			&i.MorningstarEvidenceItem.ToolBinarySha256,
+			&i.MorningstarEvidenceItem.OperationHash,
+			&i.MorningstarEvidenceItem.DecisionID,
+			&i.MorningstarEvidenceItem.RedactedArgs,
+			&i.MorningstarEvidenceItem.CreatedAt,
+			&i.MorningstarEvidenceStatus.EvidenceID,
+			&i.MorningstarEvidenceStatus.IntegrityState,
+			&i.MorningstarEvidenceStatus.LastCheckID,
+			&i.MorningstarEvidenceStatus.RetentionState,
+			&i.MorningstarEvidenceStatus.PurgedAt,
+			&i.MorningstarEvidenceStatus.PurgedBy,
+			&i.MorningstarEvidenceStatus.CompromisedAt,
+			&i.MorningstarEvidenceStatus.UpdatedAt,
+			&i.ProgramArchived,
+			&i.LastCheckedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evidenceLinksBelong = `-- name: EvidenceLinksBelong :one
+SELECT (
+    ($1::uuid IS NULL OR EXISTS (SELECT 1 FROM morningstar.jobs j WHERE j.id = $1::uuid AND j.assessment_id = $2::uuid))
+    AND ($3::uuid IS NULL OR ($1::uuid IS NOT NULL AND EXISTS (SELECT 1 FROM morningstar.job_attempts a WHERE a.id = $3::uuid AND a.job_id = $1::uuid)))
+    AND ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM morningstar.policy_decisions d WHERE d.id = $4::uuid AND d.assessment_id = $2::uuid
+         AND ($1::uuid IS NULL OR d.job_id = $1::uuid)))
+)::boolean AS ok
+`
+
+type EvidenceLinksBelongParams struct {
+	JobID        pgtype.UUID
+	AssessmentID pgtype.UUID
+	AttemptID    pgtype.UUID
+	DecisionID   pgtype.UUID
+}
+
+func (q *Queries) EvidenceLinksBelong(ctx context.Context, arg EvidenceLinksBelongParams) (bool, error) {
+	row := q.db.QueryRow(ctx, evidenceLinksBelong,
+		arg.JobID,
+		arg.AssessmentID,
+		arg.AttemptID,
+		arg.DecisionID,
+	)
+	var ok bool
+	err := row.Scan(&ok)
+	return ok, err
 }
 
 const evidenceOwned = `-- name: EvidenceOwned :one
@@ -242,6 +379,30 @@ INSERT INTO morningstar.evidence_status (evidence_id) VALUES ($1::uuid)
 func (q *Queries) InsertEvidenceStatus(ctx context.Context, dollar_1 pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, insertEvidenceStatus, dollar_1)
 	return err
+}
+
+const knownEvidenceKeys = `-- name: KnownEvidenceKeys :many
+SELECT storage_key FROM morningstar.evidence_items WHERE store_backend = 'local_fs' AND storage_key = ANY($1::text[])
+`
+
+func (q *Queries) KnownEvidenceKeys(ctx context.Context, keys []string) ([]string, error) {
+	rows, err := q.db.Query(ctx, knownEvidenceKeys, keys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var storage_key string
+		if err := rows.Scan(&storage_key); err != nil {
+			return nil, err
+		}
+		items = append(items, storage_key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listEvidenceAsc = `-- name: ListEvidenceAsc :many

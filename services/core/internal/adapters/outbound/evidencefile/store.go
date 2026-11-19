@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/domain/evidence"
 	"github.com/Adibayuluthfiansyah/MORN1NGST4R/services/core/internal/platform/posix"
@@ -191,9 +192,17 @@ func (s *Store) Remove(ctx context.Context, key string) error {
 	return nil
 }
 
-// Observe hashes the file under key.
-func (s *Store) Observe(ctx context.Context, key string) (evidence.Observation, error) {
-	o, _, err := s.look(ctx, key, -1)
+// Observe hashes the file under key. It reads at most limit bytes: a file that
+// is longer is reported by its size and is not hashed, so a file that a local
+// process made huge costs a stat and not a read.
+func (s *Store) Observe(ctx context.Context, key string, limit int64) (evidence.Observation, error) {
+	if limit < 0 {
+		return evidence.Observation{}, errors.New("evidencefile: negative limit")
+	}
+	if limit > s.max {
+		return evidence.Observation{}, outbound.ErrEvidenceTooLarge
+	}
+	o, _, err := s.look(ctx, key, limit, false)
 	return o, err
 }
 
@@ -208,12 +217,12 @@ func (s *Store) Read(ctx context.Context, key string, limit int64) (evidence.Obs
 	if err := checkKey(key); err != nil {
 		return evidence.Observation{}, nil, err
 	}
-	return s.look(ctx, key, limit)
+	return s.look(ctx, key, limit, true)
 }
 
-// look inspects the file. keep is the limit of the bytes to return, or -1 to
-// hash without keeping them.
-func (s *Store) look(ctx context.Context, key string, keep int64) (evidence.Observation, []byte, error) {
+// look inspects the file. It reads at most limit bytes, and returns them when
+// retain is set.
+func (s *Store) look(ctx context.Context, key string, limit int64, retain bool) (evidence.Observation, []byte, error) {
 	if err := checkKey(key); err != nil {
 		return evidence.Observation{}, nil, err
 	}
@@ -250,30 +259,92 @@ func (s *Store) look(ctx context.Context, key string, keep int64) (evidence.Obse
 		return unsafe, nil, nil
 	}
 	o := evidence.Observation{Found: true, Safe: true, Size: st.Size()}
-	if keep >= 0 && st.Size() > keep {
+	if st.Size() > limit {
 		return o, nil, nil
 	}
 	h := sha256.New()
 	var buf bytes.Buffer
 	var dst io.Writer = h
-	src := io.Reader(f)
-	if keep >= 0 {
+	if retain {
 		dst = io.MultiWriter(h, &buf)
-		src = io.LimitReader(f, keep+1)
 	}
-	n, err := copyCtx(ctx, dst, src)
+	n, err := copyCtx(ctx, dst, io.LimitReader(f, limit+1))
 	if err != nil {
 		return evidence.Observation{}, nil, fmt.Errorf("evidencefile: read: %w", err)
 	}
 	o.Size = n
-	if keep >= 0 && n > keep {
+	if n > limit {
 		return o, nil, nil
 	}
 	copy(o.Digest[:], h.Sum(nil))
-	if keep >= 0 {
+	if retain {
 		return o, buf.Bytes(), nil
 	}
 	return o, nil, nil
+}
+
+// List names every entry of the directory with its age. It reads the entries and
+// follows none of them. The sweep decides what an entry is: a published file, a
+// temporary file of an interrupted write, or something that does not belong here.
+func (s *Store) List(ctx context.Context) ([]outbound.StoredFile, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	d, err := s.root.Open(".")
+	if err != nil {
+		return nil, fmt.Errorf("evidencefile: open the directory: %w", err)
+	}
+	defer d.Close()
+	entries, err := d.ReadDir(-1)
+	if err != nil {
+		return nil, fmt.Errorf("evidencefile: list the directory: %w", err)
+	}
+	out := make([]outbound.StoredFile, 0, len(entries))
+	for _, e := range entries {
+		info, err := e.Info()
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // removed while we read
+		}
+		if err != nil {
+			return nil, fmt.Errorf("evidencefile: stat an entry: %w", err)
+		}
+		name := e.Name()
+		out = append(out, outbound.StoredFile{
+			Name: name, ModTime: info.ModTime(), Size: info.Size(), Special: !info.Mode().IsRegular(),
+			IsKey: keyPattern.MatchString(name), Temporary: validTemporary(name),
+		})
+	}
+	return out, nil
+}
+
+// validTemporary is the name that Put gives to a file that is not yet published.
+func validTemporary(name string) bool {
+	rest, ok := strings.CutPrefix(name, tmpPrefix)
+	if !ok || rest == "" || len(rest) > 64 {
+		return false
+	}
+	for i := 0; i < len(rest); i++ {
+		c := rest[i]
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// RemoveTemporary deletes a temporary file of an interrupted write. It refuses
+// every other name, so the sweep cannot remove evidence by a mistake.
+func (s *Store) RemoveTemporary(ctx context.Context, name string) error {
+	if !validTemporary(name) {
+		return errors.New("evidencefile: not the name of a temporary file")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.root.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("evidencefile: remove a temporary file: %w", err)
+	}
+	return nil
 }
 
 // safe says that the file is a regular file of the running user, closed to the

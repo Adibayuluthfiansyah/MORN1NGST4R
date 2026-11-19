@@ -204,7 +204,7 @@ func TestAnOverwriteAndASwapAreDetected(t *testing.T) {
 				t.Fatal(err)
 			}
 			tamper.do(t, dir)
-			o, err := s.Observe(context.Background(), keyA)
+			o, err := s.Observe(context.Background(), keyA, it.Size())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -273,7 +273,7 @@ func TestAFileThatIsNotAPlainOwnerOnlyFileIsNotSafe(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s, dir := newStore(t)
 			prepare(t, dir)
-			o, err := s.Observe(context.Background(), keyA)
+			o, err := s.Observe(context.Background(), keyA, it.Size())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -293,7 +293,7 @@ func TestAFileThatIsNotAPlainOwnerOnlyFileIsNotSafe(t *testing.T) {
 
 func TestAMissingFileIsAFindingAndNotAnError(t *testing.T) {
 	s, _ := newStore(t)
-	o, err := s.Observe(context.Background(), keyA)
+	o, err := s.Observe(context.Background(), keyA, 1)
 	if err != nil || o.Found {
 		t.Fatalf("Observe = %+v, %v", o, err)
 	}
@@ -333,7 +333,7 @@ func TestNoKeyCanLeaveTheDirectory(t *testing.T) {
 		if _, err := s.Put(context.Background(), key, []byte("x")); err == nil {
 			t.Errorf("Put(%q) succeeded", key)
 		}
-		if _, err := s.Observe(context.Background(), key); err == nil {
+		if _, err := s.Observe(context.Background(), key, 1); err == nil {
 			t.Errorf("Observe(%q) succeeded", key)
 		}
 		if _, _, err := s.Read(context.Background(), key, 1); err == nil {

@@ -88,7 +88,7 @@ var grantMatrix = map[string]map[string][]string{
 		"targets":                   {"S"},
 	},
 	"ms_retention": {
-		"audit_events":              {"S"},
+		"audit_events":              {"SI"},
 		"evidence_integrity_checks": {"S"},
 		"evidence_items":            {"S"},
 		"evidence_status":           {"S", "retention_state", "purged_at", "purged_by", "updated_at"},
@@ -184,6 +184,46 @@ func sortedKeys(m map[string]bool) []string {
 
 // Properties of the matrix that must hold whatever the table list is (DB-04,
 // P-32, DB-17). The retention role holds no DELETE: M3 has no purge path.
+// The worker runs the startup recovery check, which asks only whether an
+// account exists (migration 00019). It may read users.id and no other column.
+func TestTheWorkerReadsOnlyTheIdOfUsers(t *testing.T) {
+	c := pgtest.Get(t)
+	c.Fresh(t)
+	conn := c.Owner(t)
+	cols := map[string]bool{}
+	rows, err := conn.Query(t.Context(), `SELECT a.attname, has_column_privilege('ms_worker', a.attrelid, a.attnum, 'SELECT')
+		FROM pg_attribute a WHERE a.attrelid = 'morningstar.users'::regclass AND a.attnum > 0 AND NOT a.attisdropped`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		var ok bool
+		if err := rows.Scan(&name, &ok); err != nil {
+			t.Fatal(err)
+		}
+		cols[name] = ok
+	}
+	if len(cols) == 0 {
+		t.Fatal("no columns of users were read")
+	}
+	for name, ok := range cols {
+		if ok != (name == "id") {
+			t.Errorf("ms_worker SELECT on users.%s = %v", name, ok)
+		}
+	}
+	for _, role := range []string{"ms_retention", "public"} {
+		var ok bool
+		if err := conn.QueryRow(t.Context(), `SELECT has_column_privilege($1, 'morningstar.users', 'id', 'SELECT')`, role).Scan(&ok); err != nil {
+			t.Fatal(err)
+		}
+		if ok {
+			t.Errorf("%s can read users.id", role)
+		}
+	}
+}
+
 func TestNoRoleCanRewriteHistoryOrBypassTheClaimFunction(t *testing.T) {
 	c := pgtest.Get(t)
 	c.Fresh(t)
@@ -249,7 +289,10 @@ func TestNoRoleCanRewriteHistoryOrBypassTheClaimFunction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowed := map[fn]bool{{"consume_approval_use", "ms_worker"}: true, {"check_approval_launch", "ms_worker"}: true}
+	allowed := map[fn]bool{
+		{"consume_approval_use", "ms_worker"}: true, {"check_approval_launch", "ms_worker"}: true,
+		{"retention_purge_sessions", "ms_retention"}: true, {"retention_purge_login_attempts", "ms_retention"}: true,
+	}
 	for _, f := range fns {
 		if !allowed[f] {
 			t.Errorf("%s may execute morningstar.%s", f.role, f.name)
