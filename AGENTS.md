@@ -143,6 +143,35 @@ The owner performs all staging, commits, pushes, merges, branch switches, resets
 - `.kiro/skills/` is a separate local payload for Kiro CLI. Do not edit it.
 - The following skills are deliberately not migrated: `subagent-driven-development`, `dispatching-parallel-agents`, `writing-skills`, and the UI/design set.
 
+### Skill routing
+
+Use this table to select the minimum relevant skills for the task. The table is guidance; it does not make selection deterministic and it cannot guarantee compliance.
+
+| Task | Required skills |
+|---|---|
+| Feature exploration/design | `brainstorming` |
+| Implementation planning | `writing-plans` |
+| Approved plan execution | `executing-plans`, `test-driven-development` |
+| Bug investigation | `systematic-debugging` |
+| Bug fixing | `systematic-debugging`, `test-driven-development` |
+| Completion verification | `verification-before-completion` |
+| Code review request | `requesting-code-review` |
+| Review feedback handling | `receiving-code-review` |
+| Code quality/simplicity | `karpathy-guidelines` |
+| General Q&A/documentation/security analysis | No required skill |
+
+`No required skill` means none is mandatory for that class; load one only if it clearly helps.
+
+Before substantive work or related tool calls begin, load each required skill with the OpenCode `skill` tool using its exact ID. Do not claim a skill is loaded unless the tool invocation occurred. If a required skill is unavailable or fails to load, stop and report it. Additional relevant skills may be loaded when they help; do not load every skill without a reason.
+
+The permission allowlist in `.opencode/opencode.json` permits only the nine listed skill IDs. It controls permission and visibility; it does not force the model to invoke a skill. Do not describe this routing as deterministic or guaranteed.
+
+After selecting skills, report on its own line:
+
+```text
+Skills: loaded: <names or none> | not loaded: <names with reason or none>
+```
+
 ## 11. Documentation and specifications
 
 - Feature designs go in `.kiro/specs/<feature>/design.md`.
