@@ -9,6 +9,7 @@ Third-party skills used while developing MORN1NGST4R with Kiro CLI V3, plus a lo
 | Installed skills (unmodified upstream copies) | `.kiro/skills/<name>/` |
 | OpenCode project skills (adapted, local only, git-ignored) | `.opencode/skills/<skill-id>/` |
 | OpenCode project instructions | `AGENTS.md` |
+| OpenCode project config (skill permission allowlist) | `.opencode/opencode.json` |
 | OpenCode provenance, pins and licenses (local only, git-ignored) | `.opencode/skills/third-party-notices/NOTICE.md` |
 | Always-on Caveman rule (generated, local only, git-ignored) | `.kiro/steering/caveman.md` |
 | Always-on Karpathy include and conflict rules | `.kiro/steering/karpathy-guidelines.md` |
@@ -28,6 +29,8 @@ Nine skills are adapted from the Kiro payload for local OpenCode use:
 
 `brainstorming`, `writing-plans`, `executing-plans`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `karpathy-guidelines`.
 
+The project config `.opencode/opencode.json` is the V2 permission allowlist for these nine IDs. Its ordered rules are a wildcard `skill` deny followed by one `skill` allow per ID. A `deny` hides matching skills from the model and rejects loading; an `allow` advertises and loads the skill without approval. The allowlist does not force the model to invoke a skill. OpenCode merges this project config with the global config; it does not replace the global model, provider, or other non-conflicting settings.
+
 The copies are not verbatim. The adaptations:
 
 - Remove Kiro and Claude Code host coupling: `superpowers:` prefixes, `load_resource`, `invoke_sub_agent`, `CLAUDE_*`, hooks, and the session bootstrap.
@@ -46,15 +49,15 @@ Provenance, pinned commits, licenses, and adaptation notes are in `.opencode/ski
 
 ### Local-only policy and fresh clones
 
-`.opencode/skills/` is git-ignored. The adapted payload is local tooling and is not committed or redistributed. `AGENTS.md` is tracked.
+`.opencode/skills/` is git-ignored. The adapted payload is local tooling and is not committed or redistributed. `AGENTS.md` and `.opencode/opencode.json` are tracked.
 
-A fresh clone has the project instructions but neither skill payload: both `.kiro/skills/` and `.opencode/skills/` are git-ignored. First restore the Kiro payload with `scripts/sync-agent-skills.sh install` (see below). Then recreate the adapted `.opencode/skills/` locally from `.kiro/skills/` using the adaptation rules above and the notice, or work without them. There is no sync script for the adapted copies. Neither payload is required for the application to build or run.
+A fresh clone has the project instructions and permission allowlist but neither skill payload: both `.kiro/skills/` and `.opencode/skills/` are git-ignored. First restore the Kiro payload with `scripts/sync-agent-skills.sh install` (see below). Then recreate the adapted `.opencode/skills/` locally from `.kiro/skills/` using the adaptation rules above and the notice, or work without them. There is no sync script for the adapted copies. Neither payload is required for the application to build or run.
 
 ## Git policy
 
 | Tracked | Git-ignored (local only) |
 | --- | --- |
-| `.kiro/steering/` (project-authored files only), `.kiro/specs/`, `.kiro/hooks/`, `scripts/sync-agent-skills.sh`, `docs/development/`, `AGENTS.md` | `.kiro/skills/` (44 MB third-party payload), `.kiro/steering/caveman.md` (generated), `.kiro/skills-licenses/`, `.kiro/skills-lock.json`, `.opencode/skills/` (adapted payload), `.superpowers/`, `.worktrees/`, `.taste-skill/`, `.env*` |
+| `.kiro/steering/` (project-authored files only), `.kiro/specs/`, `.kiro/hooks/`, `scripts/sync-agent-skills.sh`, `docs/development/`, `AGENTS.md`, `.opencode/opencode.json` | `.kiro/skills/` (44 MB third-party payload), `.kiro/steering/caveman.md` (generated), `.kiro/skills-licenses/`, `.kiro/skills-lock.json`, `.opencode/skills/` (adapted payload), `.superpowers/`, `.worktrees/`, `.taste-skill/`, `.env*` |
 
 ## Fresh clone setup
 
@@ -101,7 +104,25 @@ No custom agents are used. Steering `inclusion: always` replaces the upstream se
 
 ## Skill routing
 
-This section describes the Kiro CLI routing policy. OpenCode has no routing hook or session bootstrap; it selects from the nine adapted skills by their frontmatter descriptions when the model calls the `skill` tool. The `load_resource` call and the `Route:` reply prefix do not exist in OpenCode.
+There are two separate routing systems. They share some skill names but do not share an enforcement mechanism.
+
+### OpenCode routing (this project)
+
+Policy: `AGENTS.md` section 10. OpenCode has no routing hook and no session bootstrap. The model sees the available skills' IDs and descriptions, then calls the `skill` tool with an exact ID. The routing table in `AGENTS.md` names the minimum required skills for each task class. It is guidance, not a deterministic dispatcher, and it cannot guarantee that the model follows it.
+
+The project permission allowlist is `.opencode/opencode.json`. It uses the V2 `permissions` ruleset: a wildcard `{ "action": "skill", "resource": "*", "effect": "deny" }` followed by one `allow` rule per project skill. Rules run in order and the last matching rule wins. `deny` hides matching skills from the model and rejects loading; `allow` advertises the skill and loads it without approval. The allowlist does not force invocation.
+
+OpenCode merges the project config with the global config; it does not replace the global file. Settings that do not conflict, such as the global model and providers, are preserved. Permission rules are combined in order: lower-priority configuration is loaded first, top-level rules next, and agent-specific rules last. A later matching rule wins, so verify the merged result instead of assuming the project file alone defines the policy. `opencode debug config` lists the configuration sources and the effective values.
+
+After selecting skills, `AGENTS.md` requires this line:
+
+```text
+Skills: loaded: <names or none> | not loaded: <names with reason or none>
+```
+
+### Kiro routing (reference)
+
+The following is the Kiro CLI V3 policy. It is separate from OpenCode; do not edit `.kiro/steering/skill-routing.md` or `.kiro/hooks/skill-routing.json` for OpenCode work.
 
 Policy: `.kiro/steering/skill-routing.md` (always-on). Enforcement nudge: `.kiro/hooks/skill-routing.json`, one `UserPromptSubmit` hook with an `agent` action that appends a fixed reminder to every prompt (no script, no logic). Each request is classified, the matching skills are loaded with `load_resource` (`skill::<name>`), and the reply starts with `Route: <class> | loaded: ... | not loaded: ...` so a missed load is visible.
 
@@ -120,9 +141,48 @@ Why the hook exists: in fresh headless-session tests, steering alone loaded skil
 
 No installed skill covers security assessment or documentation. Security gates (scope, approval, no unrequested commit or push) come from `.kiro/steering/security.md` and `AGENTS.md`, and they outrank every skill. The routing file restates them for Kiro CLI; it is not their authority.
 
-Adding or removing a skill: update the routing table in `skill-routing.md` in the same change.
+Adding or removing a skill: update the routing table in `skill-routing.md` in the same change. For OpenCode, update the `AGENTS.md` table and the `.opencode/opencode.json` allowlist together.
 
 This is a dev-agent workflow. It is unrelated to the product's runtime AI skills in the repo-root `skills/` directory.
+
+### Comparison
+
+| Concern | Kiro CLI | OpenCode |
+| --- | --- | --- |
+| Routing policy | `.kiro/steering/skill-routing.md` (always-on steering) | `AGENTS.md` section 10 |
+| Load call | `load_resource` with `skill::<name>` | `skill` tool with the exact ID |
+| Enforcement nudge | `UserPromptSubmit` hook `.kiro/hooks/skill-routing.json` | No hook; permission allowlist only |
+| Reply marker | `Route:` prefix with loaded/not-loaded lists | `Skills: loaded: ...` / `not loaded: ...` line |
+| Determinism | Not deterministic; steering plus hook nudge | Not deterministic; instructions plus permissions |
+| Available skills | Kiro payload, including skills not migrated to OpenCode | Only the nine IDs allowed by `.opencode/opencode.json` are advertised in this project |
+
+### Verifying the OpenCode configuration
+
+From the repository root:
+
+```bash
+python3 -m json.tool .opencode/opencode.json >/dev/null
+opencode debug config
+git diff --check
+```
+
+`opencode debug config` must list `.opencode/opencode.json` as a source and show the nine allow rules. Inspect every source for `permissions` rules, including `agents.<id>.permissions`: agent rules are appended after the top-level rules, and a later matching rule wins, so a global or agent rule can change the effective decision. This check confirms that every allowlisted ID matches a skill directory and that no extra skill is allowed:
+
+```bash
+python3 - <<'PY'
+import json, os
+cfg = json.load(open('.opencode/opencode.json'))
+allowed = [r['resource'] for r in cfg['permissions'] if r['action'] == 'skill' and r['effect'] == 'allow']
+dirs = {d for d in os.listdir('.opencode/skills') if os.path.exists(os.path.join('.opencode/skills', d, 'SKILL.md'))}
+print('allowed:', allowed)
+print('missing dirs:', sorted(set(allowed) - dirs))
+print('unexpected dirs:', sorted(dirs - set(allowed)))
+assert len(allowed) == 9
+assert set(allowed) == dirs
+PY
+```
+
+A successful parse, discovery, and ID match prove that the file is syntactically valid JSON, discovered, and consistent with the skill directories. They do not prove full conformance against a standards-compliant JSON Schema validator, and they do not show that the model will invoke a skill. The model still decides. The allowlist also cannot make a missing local skill payload appear; restore `.opencode/skills/` first (see Local-only policy and fresh clones).
 
 ## Updating
 
