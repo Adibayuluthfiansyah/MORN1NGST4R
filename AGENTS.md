@@ -199,3 +199,14 @@ Stop and ask the owner when:
 - A skill conflicts with project steering or security policy.
 
 Do not improvise past a stop condition. Report the exact state and ask.
+
+## Codex skill routing
+
+In Codex, classify the requested outcome and phase before substantive work. Inspect the available skill catalog and match descriptions to the work. Choose the smallest complementary set, starting with the workflow and adding a domain skill where it supplies project-specific checks. Read each selected skill's entire `SKILL.md` via its advertised path before using it. Load only references relevant to the work. Select again when the task changes phase. Natural-language requests are sufficient for selection.
+
+Use section 10's task table as workflow guidance in Codex. For design and implementation planning, apply the owner approval gates before changing phases. For direct reviews and responses to review feedback, select the applicable review workflow. For completion claims, load verification-before-completion and run the checks that support the claim. If a required workflow is missing, report the blocker. If an optional domain skill is missing, use the authoritative documents and general capabilities, and report the gap when material.
+
+Consider `morn-engineering` for project Go/Gin, Next.js/TypeScript, PostgreSQL, and architecture work. Consider `morn-defensive-review` for application and API defense, threat models, auth, and supplied evidence triage. Add debugging for broken behavior, testing for approved changes, or review for a specified diff when each contributes a distinct procedure. Ordinary Q&A can proceed without a skill. Use one skill when several would repeat the same workflow.
+
+The OpenCode-specific invocation and reporting requirements in section 10 apply to OpenCode. In Codex, report the skills whose instructions you actually read and followed, with a short reason where useful. Explicitly requested skills remain subject to higher-priority instructions. Skill selection never supplies owner approval or milestone authorization. Keep M8 BUILD unauthorized until explicitly approved by the owner. Apply project security, scope, data handling, and Git ownership throughout. Repository-root `skills/` contains product runtime skills and is outside this development catalog.
+
