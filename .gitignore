@@ -30,7 +30,7 @@
 .taste-skill/
 # Adapted OpenCode project skills. Local only, derived from .kiro/skills/; not redistributed.
 .opencode/skills/
-
+.agents/
 # === 2. Secrets, credentials and local configuration (security.md section 6) ====================
 .env
 .env.*
